@@ -1,57 +1,28 @@
 'use strict';
 
 var dataForge = require("../../index.js");
-var csv = require('../../format/csv');
-var file = require('../../source/file');
-
-var glob = require('glob');
+var fs = require('fs');
 var E = require('linq');
-var assert = require('chai').assert;
-
-//
-// Load as single CSV file containing share prices.
-//
-var loadSharePricesFile = function (filePath) {
-	assert.isString(filePath);
-	
-	return dataForge.from(file(filePath)).as(csv());
-};
-
-//
-// Save data frame to a CSV file.
-//
-var saveSharePricesFile = function (dataFrame, filePath) {
-	assert.isObject(dataFrame);
-	assert.isString(filePath);
-
-	return dataFrame.as(csv()).to(file(filePath));
-};
 
 //
 // Create a new data frame containing a simple moving average of the share price.
 //
 var computeSimpleMovingAverage = function (dataFrame, period) {
-	assert.isObject(dataFrame);
 
-	var movingAvgColumn = dataFrame
-		.getColumn('Close')
+	var movingAvg = dataFrame.getSeries('Close')
 		.rollingWindow(period, 
-			function (values) {
-				return E.from(values).sum() / values.length;
+			function (window) {
+				return [window.getIndex().last(), window.average()];
 			}
 		);
 
 	// Create a new data frame with the new column, doesn't modify original data frame.
-	return dataFrame.setColumn('SMA', movingAvgColumn);
+	//console.log(movingAvg.getIndex().toValues());
+	return dataFrame.setSeries('SMA', movingAvg);
 };
 
-loadSharePricesFile('share_prices.csv')
-	.then(function (dataFrame) {
-		return computeSimpleMovingAverage(dataFrame, 30); // 30 day moving average.
-	})
-	.then(function (dataFrame) {
-		return saveSharePricesFile(dataFrame, 'output.csv');
-	})
-	.catch(function (err) {
-		console.error(err.stack);
-	});
+var dataFrame = dataForge
+		.fromCSV(fs.readFileSync('share_prices.csv', 'utf8'))
+		.parseFloats('Close');
+var withMovingAvg = computeSimpleMovingAverage(dataFrame, 30); // 30 day moving average.
+fs.writeFileSync('output.csv', withMovingAvg.toCSV());

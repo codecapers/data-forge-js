@@ -1,6 +1,4 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-
-},{}],2:[function(require,module,exports){
 (function (global){
 /*!
  * The buffer module from node.js, for the browser.
@@ -1548,7 +1546,7 @@ function blitBuffer (src, dst, offset, length) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"base64-js":3,"ieee754":4,"is-array":5}],3:[function(require,module,exports){
+},{"base64-js":2,"ieee754":3,"is-array":4}],2:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 ;(function (exports) {
@@ -1674,7 +1672,7 @@ var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 	exports.fromByteArray = uint8ToBase64
 }(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
 
-},{}],4:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = nBytes * 8 - mLen - 1
@@ -1760,7 +1758,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],5:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 
 /**
  * isArray
@@ -1795,94 +1793,37 @@ module.exports = isArray || function (val) {
   return !! val && '[object Array]' == str.call(val);
 };
 
-},{}],6:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 
 window.dataForge = require('../../index');
-window.dataForge.csv = require('../../format/csv');
-window.dataForge.http = require('../../source/browser/http');
 window.moment = require('moment');
 window.E = require('linq');
 
-},{"../../format/csv":7,"../../index":8,"../../source/browser/http":49,"linq":46,"moment":47}],7:[function(require,module,exports){
-'use strict';
-
-//
-// Implements input/output for the CSV format.
-//
-
-var dataForge = require('../index');
-
-var E = require('linq');
-var assert = require('chai').assert;
-
-module.exports = function (options) {
-
-	if (!options) {
-		options = {};
-	}
-	if (!options.parse_dates) {
-		options.parse_dates = [];			
-	}
-
-	return {
-
-		//
-		// Load a DataFrame from CSV text data.
-		//
-		from: function (csvData) {
-			assert.isString(csvData, "Expected 'csvData' parameter to 'csv.from' to be a string.");
-			
-			var lines = csvData.split('\n');
-			var rows = E
-				.from(lines) // Ignore blank lines.
-				.where(function (line) {
-					return line.trim().length > 0;
-				})
-				.select(function (line) {
-					return E
-						.from(line.split(','))
-						.select(function (col) {
-							return col.trim();
-						})
-						.select(function (col) {
-							if (col.length === 0) {
-								return undefined;
-							}
-							else {
-								return col;
-							}
-						})
-						.toArray();					
-				})
-				.toArray();
-					
-			return dataForge.builder(rows, options);
-		},
-		
-		//
-		// Write DataFrame to csv text data.
-		//
-		to: function (dataFrame) {
-			
-			var header = dataFrame.getColumnNames().join(',');
-			var rows = E.from(dataFrame.getValues())
-					.select(function (row) {
-						return row.join(',');
-					})
-					.toArray();
-			return [header].concat(rows).join('\r\n');	
-		},	
-	};
-};
-},{"../index":8,"chai":9,"linq":46}],8:[function(require,module,exports){
+},{"../../index":6,"linq":46,"moment":47}],6:[function(require,module,exports){
 'use strict';
 
 var assert = require('chai').assert;
 var E = require('linq');
 var dropElement = require('./src/utils').dropElement;
+var ArrayIterator = require('./src/iterators/array');
+var ConcatIterator = require('./src/iterators/concat');
+var SelectIterator = require('./src/iterators/select');
+var MultiIterator = require('./src/iterators/multi');
+require('sugar');
+var BabyParse = require('babyparse');
+
+var DataFrame = require('./src/dataframe');
+var Series = require('./src/series');
+var Index = require('./src/index');
+var E = require('linq');
+
+//
+// Records plugins that have been registered.
+//
+var registeredPlugins = {};
 
 /**
- * Main namespace for Panjas.
+ * Main namespace for Data-Forge.
  * 
  * Nodejs:
  * 
@@ -1898,46 +1839,108 @@ var dropElement = require('./src/utils').dropElement;
  */
 var dataForge = {
 	
-	DataFrame: require('./src/dataframe'),
-	LazyDataFrame: require('./src/lazydataframe'),
-	Column: require('./src/column'),
-	LazyColumn: require('./src/lazycolumn'),
-	builder: require('./src/builder'),	
-	Index: require('./src/index'),
+	DataFrame: DataFrame,
+	Series: Series,
+	Index: Index,
 
 	/**
-	 * Read a DataFrame from a plugable data source.
+	 * Install a plugin in the dataForge namespace.
 	 */
-	from: function (dataSourcePlugin) {
-		assert.isObject(dataSourcePlugin, "Expected 'dataSourcePlugin' parameter to 'dataForge.from' to be an object.");
-		assert.isFunction(dataSourcePlugin.read, "Expected 'dataSourcePlugin' parameter to 'dataForge.from' to be an object with a 'read' function.");
+	use: function (plugin) {
+
+		assert.isFunction(plugin, "Expected 'plugin' parameter to 'use' to be a function.");
+
+		if (registeredPlugins[plugin] === plugin) {
+			return; // Already registered.
+		}
+
+		registeredPlugins[plugin] = plugin;
+
+		var self = this;
+		plugin(self);
+	},
+
+
+	/**
+	 * Deserialize a data frame from a JSON text string.
+	 */
+	fromJSON: function (jsonTextString) {
+		assert.isString(jsonTextString, "Expected 'jsonTextString' parameter to 'dataForge.fromJSON' to be a string containing data encoded in the JSON format.");
+
+		return new DataFrame({
+				rows: JSON.parse(jsonTextString)
+			});
+	},
+
+	//
+	// Deserialize a data from a CSV text string.
+	//
+	fromCSV: function (csvTextString, config) {
+		assert.isString(csvTextString, "Expected 'csvTextString' parameter to 'dataForge.fromCSV' to be a string containing data encoded in the CSV format.");
+
+		var parsed = BabyParse.parse(csvTextString, config);
+		var rows = parsed.data;
 		
-		return {
-			/**
-			 * Convert DataFrame from a particular data format using a plugable format.
-			 */
-			as: function (formatPlugin) {
-				assert.isObject(formatPlugin, "Expected 'formatPlugin' parameter to 'dataForge.from' to be an object.");
-				assert.isFunction(formatPlugin.from, "Expected 'formatPlugin' parameter to 'dataForge.from' to be an object with a 'from' function.");
+		/* Old csv parsing.
+		var lines = csvTextString.split('\n');
+		var rows = E
+			.from(lines) // Ignore blank lines.
+			.where(function (line) {
+				return line.trim().length > 0;
+			})
+			.select(function (line) {
+				return E
+					.from(line.split(','))
+					.select(function (col) {
+						return col.trim();
+					})
+					.select(function (col) {
+						if (col.length === 0) {
+							return undefined;
+						}
+						else {
+							return col;
+						}
+					})
+					.toArray();					
+			})
+			.toArray();
+		*/
+
+		if (rows.length === 0) {
+			return new dataForge.DataFrame({ columnNames: [], rows: [] });
+		}
 				
-				return dataSourcePlugin.read()
-					.then(function (textData) {
-						return formatPlugin.from(textData);
-					});		
-			},		
-		};
+		var columnNames = E.from(E.from(rows).first())
+				.select(function (columnName) {
+					return columnName.trim();
+				})
+				.toArray();
+
+		var remaining = E.from(rows)
+			.skip(1)
+			.select(function (row) {
+				return E.from(row)
+					.select(function (cell) {
+						return cell.trim();
+					})
+					.toArray()
+			})
+			.toArray();
+		return new dataForge.DataFrame({
+				columnNames: columnNames, 
+				rows: remaining
+			});
 	},
 
 	/**
-	 * Merge data frames by index or a particular column.
+	 * Merge data-frames by index or a particular column.
 	 * 
 	 * @param {DataFrame} leftDataFrame - One data frame to merge.
 	 * @param {DataFrame} rightDataFrame - The other data frame to merge.
 	 * @param {string} [columnName] - The name of the column to merge on. Optional, when not specified merge is based on the index.
 	 */
 	merge: function (leftDataFrame, rightDataFrame, columnName) {
-		var LazyDataFrame = require('./src/lazydataframe'); //todo: don't included this way.
-
 		assert.isObject(leftDataFrame, "Expected 'leftDataFrame' parameter to 'merge' to be an object.");
 		assert.isObject(rightDataFrame, "Expected 'rightDataFrame' parameter to 'merge' to be an object.");
 
@@ -1955,40 +1958,1055 @@ var dataForge = {
 			throw new Error("Column with name '" + columnName + "' doesn't exist in 'rightColumnIndex'.");
 		}
 
-		var leftRows = leftDataFrame.getValues();
-		var rightRows = rightDataFrame.getValues();
+		var leftRows = leftDataFrame.toValues();
+		var rightRows = rightDataFrame.toValues();
+
+		var mergedColumnNames = [columnName]
+			.concat(dropElement(leftDataFrame.getColumnNames(), leftColumnIndex))
+			.concat(dropElement(rightDataFrame.getColumnNames(), rightColumnIndex));
+
+		var rightMap = E.from(rightRows)
+			.groupBy(function (rightRow) {
+				return rightRow[rightColumnIndex];
+			})
+			.toObject(
+				function (group) {
+					return group.key();
+				},
+				function (group) {
+					return group.getSource();
+				}
+			);
 
 		var mergedValues = E.from(leftRows) // Merge values, drop index.
 			.selectMany(function (leftRow) {
-				return E
-					.from(rightRows)
-					.where(function (rightRow) {
-						return leftRow[leftColumnIndex] === rightRow[rightColumnIndex];
-					})
+				var rightRows = rightMap[leftRow[leftColumnIndex]] || [];
+				return E.from(rightRows)
 					.select(function (rightRow) {
-						var left = dropElement(leftRow, leftColumnIndex);
-						var right = dropElement(rightRow, rightColumnIndex);
-						return [leftRow[leftColumnIndex]].concat(left).concat(right);
+						var combined = [leftRow[leftColumnIndex]];
+						
+						for (var i = 0; i < leftRow.length; ++i) {
+							if (i !== leftColumnIndex) {
+								combined.push(leftRow[i]);
+							}
+						}
+
+						for (var i = 0; i < rightRow.length; ++i) {
+							if (i !== rightColumnIndex) {
+								combined.push(rightRow[i]);
+							}
+						}
+
+						return combined;
 					});
 			})
 			.toArray();
 
-		return new LazyDataFrame(
-			function () {
-				return ['key', 'lval', 'rval'];
+		return new DataFrame({
+			columnNames: mergedColumnNames,
+			rows: function () {
+				return new ArrayIterator(mergedValues);
 			},
-			function () {
-				return mergedValues;
-			}
-		);
+		});
 	},
+
+	/**
+	 * Concatenate multiple data frames into a single.
+	 *
+	 * @param {array} dataFrames - Array of data frames to concatenate.
+	 */
+	concat: function (dataFrames) {
+		assert.isArray(dataFrames, "Expected 'dataFrames' parameter to 'dataForge.concat' to be an array of data frames.");
+
+		var concatenateColumns = function () {
+			return E.from(dataFrames)
+				.selectMany(function (dataFrame) {
+					return dataFrame.getColumnNames();
+				})
+				.distinct()
+				.toArray();
+		};
+
+		return new DataFrame({
+			columnNames: concatenateColumns(),
+			iterable: function () {
+				var concatenatedColumns = concatenateColumns();
+				var iterators = E.from(dataFrames)
+					.select(function (dataFrame) {
+						return dataFrame.remapColumns(concatenatedColumns);
+					})
+					.select(function (dataFrame) {
+						return dataFrame.getIterator();
+					})						
+					.toArray()
+				return new ConcatIterator(iterators);
+			},
+		});
+	},
+
+	/**
+	 * Generate a series from a range of numbers.
+	 *
+	 * @param {int} start - The value of the first number in the range.
+	 * @param {int} count - The number of sequential values in the range.
+	 */
+	range: function (start, count) {
+
+		assert.isNumber(start, "Expect 'start' parameter to range function to be a number.");
+		assert.isNumber(count, "Expect 'count' parameter to range function to be a number.");
+
+		return new Series({
+				values: function ()  {
+
+					var i = -1;
+
+					return { //todo: should have a range iterator.
+						moveNext: function () {
+							return ++i < count;
+						},
+
+						getCurrent: function () {
+							return start + i;
+						},
+
+					};
+				},
+			});
+	},
+
+	/*
+	 * Zip together multiple series to create a new series.
+	 *
+	 * @param {array} series - Array of series to zip together.
+	 * @param {function} selector - Selector function that produces a new series based on the input series.
+	 */
+	zipSeries: function (series, selector) {
+
+		assert.isArray(series, "Expected 'series' parameter to zipSeries to be an array of Series objects.");
+		assert.isFunction(selector, "Expected 'selector' parameter to zipSeries to be a function.");
+
+		//todo: make this lazy.
+
+		var seriesToZip = E.from(series)
+			.select(function (series) {
+				return series.toValues();
+			})
+			.toArray();
+
+		var length = E.from(seriesToZip).select(function (values) { 
+				return values.length; 
+			})
+			.min();
+
+		var output = [];
+
+		for (var i = 0; i < length; ++i) {
+			var curElements = E.from(seriesToZip)
+				.select(function (values) {
+					return values[i];
+				})
+				.toArray();
+			output.push(selector(curElements));
+		}
+
+		return new Series({
+			values: output,
+		});
+	},
+
+	/*
+	 * Zip together multiple data-frames to create a new data-frame.
+	 *
+	 * @param {array} dataFrames - Array of data-frames to zip together.
+	 * @param {function} selector - Selector function that produces a new data-frame based on the input data-frames.
+	 */
+	zipDataFrames: function (dataFrames, selector) {
+
+		assert.isArray(dataFrames, "Expected 'dataFrames' parameter to zipDataFrames to be an array of Series objects.");
+		assert.isFunction(selector, "Expected 'selector' parameter to zipDataFrames to be a function.");
+
+		//todo: make this lazy.
+
+		var dataFrameContents = E.from(dataFrames)
+			.select(function (dataFrame) {
+				return dataFrame.toObjects();
+			})
+			.toArray();
+
+		var length = E.from(dataFrameContents).select(function (objects) { 
+				return objects.length; 
+			})
+			.min();
+
+		var output = [];
+
+		for (var i = 0; i < length; ++i) {
+			var curElements = E.from(dataFrameContents)
+				.select(function (objects) {
+					return objects[i];
+				})
+				.toArray();
+			output.push(selector(curElements));
+		}
+
+		return new DataFrame({
+			rows: output,
+		});
+	},	
 };
 
 module.exports = dataForge;
-},{"./src/builder":53,"./src/column":54,"./src/dataframe":55,"./src/index":56,"./src/lazycolumn":58,"./src/lazydataframe":59,"./src/utils":61,"chai":9,"linq":46}],9:[function(require,module,exports){
+},{"./src/dataframe":49,"./src/index":50,"./src/iterators/array":51,"./src/iterators/concat":52,"./src/iterators/multi":55,"./src/iterators/select":57,"./src/series":64,"./src/utils":65,"babyparse":7,"chai":8,"linq":46,"sugar":48}],7:[function(require,module,exports){
+/*
+	Baby Parse
+	v0.4.1
+	https://github.com/Rich-Harris/BabyParse
+
+	Created by Rich Harris
+	Maintained by Matt Holt
+
+	Based on Papa Parse v4.0.7 by Matt Holt
+	https://github.com/mholt/PapaParse
+*/
+(function(global)
+{
+
+	// A configuration object from which to draw default settings
+	var DEFAULTS = {
+		delimiter: "",	// empty: auto-detect
+		newline: "",	// empty: auto-detect
+		header: false,
+		dynamicTyping: false,
+		preview: 0,
+		step: undefined,
+		comments: false,
+		complete: undefined,
+		skipEmptyLines: false,
+		fastMode: false
+	};
+
+	var Baby = {};
+	Baby.parse = CsvToJson;
+	Baby.unparse = JsonToCsv;
+	Baby.RECORD_SEP = String.fromCharCode(30);
+	Baby.UNIT_SEP = String.fromCharCode(31);
+	Baby.BYTE_ORDER_MARK = "\ufeff";
+	Baby.BAD_DELIMITERS = ["\r", "\n", "\"", Baby.BYTE_ORDER_MARK];
+	Baby.DefaultDelimiter = ",";		// Used if not specified and detection fails
+	Baby.Parser = Parser;				// For testing/dev only
+	Baby.ParserHandle = ParserHandle;	// For testing/dev only
+
+
+	function CsvToJson(_input, _config)
+	{
+		var config = copyAndValidateConfig(_config);
+		var ph = new ParserHandle(config);
+		var results = ph.parse(_input);
+		if (isFunction(config.complete))
+			config.complete(results);
+		return results;
+	}
+
+
+
+
+	function JsonToCsv(_input, _config)
+	{
+		var _output = "";
+		var _fields = [];
+
+		// Default configuration
+		var _quotes = false;	// whether to surround every datum with quotes
+		var _delimiter = ",";	// delimiting character
+		var _newline = "\r\n";	// newline character(s)
+
+		unpackConfig();
+
+		if (typeof _input === 'string')
+			_input = JSON.parse(_input);
+
+		if (_input instanceof Array)
+		{
+			if (!_input.length || _input[0] instanceof Array)
+				return serialize(null, _input);
+			else if (typeof _input[0] === 'object')
+				return serialize(objectKeys(_input[0]), _input);
+		}
+		else if (typeof _input === 'object')
+		{
+			if (typeof _input.data === 'string')
+				_input.data = JSON.parse(_input.data);
+
+			if (_input.data instanceof Array)
+			{
+				if (!_input.fields)
+					_input.fields = _input.data[0] instanceof Array
+									? _input.fields
+									: objectKeys(_input.data[0]);
+
+				if (!(_input.data[0] instanceof Array) && typeof _input.data[0] !== 'object')
+					_input.data = [_input.data];	// handles input like [1,2,3] or ["asdf"]
+			}
+
+			return serialize(_input.fields || [], _input.data || []);
+		}
+
+		// Default (any valid paths should return before this)
+		throw "exception: Unable to serialize unrecognized input";
+
+
+		function unpackConfig()
+		{
+			if (typeof _config !== 'object')
+				return;
+
+			if (typeof _config.delimiter === 'string'
+				&& _config.delimiter.length == 1
+				&& Baby.BAD_DELIMITERS.indexOf(_config.delimiter) == -1)
+			{
+				_delimiter = _config.delimiter;
+			}
+
+			if (typeof _config.quotes === 'boolean'
+				|| _config.quotes instanceof Array)
+				_quotes = _config.quotes;
+
+			if (typeof _config.newline === 'string')
+				_newline = _config.newline;
+		}
+
+
+		// Turns an object's keys into an array
+		function objectKeys(obj)
+		{
+			if (typeof obj !== 'object')
+				return [];
+			var keys = [];
+			for (var key in obj)
+				keys.push(key);
+			return keys;
+		}
+
+		// The double for loop that iterates the data and writes out a CSV string including header row
+		function serialize(fields, data)
+		{
+			var csv = "";
+
+			if (typeof fields === 'string')
+				fields = JSON.parse(fields);
+			if (typeof data === 'string')
+				data = JSON.parse(data);
+
+			var hasHeader = fields instanceof Array && fields.length > 0;
+			var dataKeyedByField = !(data[0] instanceof Array);
+
+			// If there a header row, write it first
+			if (hasHeader)
+			{
+				for (var i = 0; i < fields.length; i++)
+				{
+					if (i > 0)
+						csv += _delimiter;
+					csv += safe(fields[i], i);
+				}
+				if (data.length > 0)
+					csv += _newline;
+			}
+
+			// Then write out the data
+			for (var row = 0; row < data.length; row++)
+			{
+				var maxCol = hasHeader ? fields.length : data[row].length;
+
+				for (var col = 0; col < maxCol; col++)
+				{
+					if (col > 0)
+						csv += _delimiter;
+					var colIdx = hasHeader && dataKeyedByField ? fields[col] : col;
+					csv += safe(data[row][colIdx], col);
+				}
+
+				if (row < data.length - 1)
+					csv += _newline;
+			}
+
+			return csv;
+		}
+
+		// Encloses a value around quotes if needed (makes a value safe for CSV insertion)
+		function safe(str, col)
+		{
+			if (typeof str === "undefined" || str === null)
+				return "";
+
+			str = str.toString().replace(/"/g, '""');
+
+			var needsQuotes = (typeof _quotes === 'boolean' && _quotes)
+							|| (_quotes instanceof Array && _quotes[col])
+							|| hasAny(str, Baby.BAD_DELIMITERS)
+							|| str.indexOf(_delimiter) > -1
+							|| str.charAt(0) == ' '
+							|| str.charAt(str.length - 1) == ' ';
+
+			return needsQuotes ? '"' + str + '"' : str;
+		}
+
+		function hasAny(str, substrings)
+		{
+			for (var i = 0; i < substrings.length; i++)
+				if (str.indexOf(substrings[i]) > -1)
+					return true;
+			return false;
+		}
+	}
+
+
+
+
+
+
+	// Use one ParserHandle per entire CSV file or string
+	function ParserHandle(_config)
+	{
+		// One goal is to minimize the use of regular expressions...
+		var FLOAT = /^\s*-?(\d*\.?\d+|\d+\.?\d*)(e[-+]?\d+)?\s*$/i;
+
+		var self = this;
+		var _stepCounter = 0;	// Number of times step was called (number of rows parsed)
+		var _input;				// The input being parsed
+		var _parser;			// The core parser being used
+		var _paused = false;	// Whether we are paused or not
+		var _delimiterError;	// Temporary state between delimiter detection and processing results
+		var _fields = [];		// Fields are from the header row of the input, if there is one
+		var _results = {		// The last results returned from the parser
+			data: [],
+			errors: [],
+			meta: {}
+		};
+
+		if (isFunction(_config.step))
+		{
+			var userStep = _config.step;
+			_config.step = function(results)
+			{
+				_results = results;
+
+				if (needsHeaderRow())
+					processResults();
+				else	// only call user's step function after header row
+				{
+					processResults();
+
+					// It's possbile that this line was empty and there's no row here after all
+					if (_results.data.length == 0)
+						return;
+
+					_stepCounter += results.data.length;
+					if (_config.preview && _stepCounter > _config.preview)
+						_parser.abort();
+					else
+						userStep(_results, self);
+				}
+			};
+		}
+
+		this.parse = function(input)
+		{
+			if (!_config.newline)
+				_config.newline = guessLineEndings(input);
+
+			_delimiterError = false;
+			if (!_config.delimiter)
+			{
+				var delimGuess = guessDelimiter(input);
+				if (delimGuess.successful)
+					_config.delimiter = delimGuess.bestDelimiter;
+				else
+				{
+					_delimiterError = true;	// add error after parsing (otherwise it would be overwritten)
+					_config.delimiter = Baby.DefaultDelimiter;
+				}
+				_results.meta.delimiter = _config.delimiter;
+			}
+
+			var parserConfig = copy(_config);
+			if (_config.preview && _config.header)
+				parserConfig.preview++;	// to compensate for header row
+
+			_input = input;
+			_parser = new Parser(parserConfig);
+			_results = _parser.parse(_input);
+			processResults();
+			if (isFunction(_config.complete) && !_paused && (!self.streamer || self.streamer.finished()))
+				_config.complete(_results);
+			return _paused ? { meta: { paused: true } } : (_results || { meta: { paused: false } });
+		};
+
+		this.pause = function()
+		{
+			_paused = true;
+			_parser.abort();
+			_input = _input.substr(_parser.getCharIndex());
+		};
+
+		this.resume = function()
+		{
+			_paused = false;
+			_parser = new Parser(_config);
+			_parser.parse(_input);
+			if (!_paused)
+			{
+				if (self.streamer && !self.streamer.finished())
+					self.streamer.resume();		// more of the file yet to come
+				else if (isFunction(_config.complete))
+					_config.complete(_results);
+			}
+		};
+
+		this.abort = function()
+		{
+			_parser.abort();
+			if (isFunction(_config.complete))
+				_config.complete(_results);
+			_input = "";
+		};
+
+		function processResults()
+		{
+			if (_results && _delimiterError)
+			{
+				addError("Delimiter", "UndetectableDelimiter", "Unable to auto-detect delimiting character; defaulted to '"+Baby.DefaultDelimiter+"'");
+				_delimiterError = false;
+			}
+
+			if (_config.skipEmptyLines)
+			{
+				for (var i = 0; i < _results.data.length; i++)
+					if (_results.data[i].length == 1 && _results.data[i][0] == "")
+						_results.data.splice(i--, 1);
+			}
+
+			if (needsHeaderRow())
+				fillHeaderFields();
+
+			return applyHeaderAndDynamicTyping();
+		}
+
+		function needsHeaderRow()
+		{
+			return _config.header && _fields.length == 0;
+		}
+
+		function fillHeaderFields()
+		{
+			if (!_results)
+				return;
+			for (var i = 0; needsHeaderRow() && i < _results.data.length; i++)
+				for (var j = 0; j < _results.data[i].length; j++)
+					_fields.push(_results.data[i][j]);
+			_results.data.splice(0, 1);
+		}
+
+		function applyHeaderAndDynamicTyping()
+		{
+			if (!_results || (!_config.header && !_config.dynamicTyping))
+				return _results;
+
+			for (var i = 0; i < _results.data.length; i++)
+			{
+				var row = {};
+
+				for (var j = 0; j < _results.data[i].length; j++)
+				{
+					if (_config.dynamicTyping)
+					{
+						var value = _results.data[i][j];
+						if (value == "true" || value === "TRUE")
+							_results.data[i][j] = true;
+						else if (value == "false" || value === "FALSE")
+							_results.data[i][j] = false;
+						else
+							_results.data[i][j] = tryParseFloat(value);
+					}
+
+					if (_config.header)
+					{
+						if (j >= _fields.length)
+						{
+							if (!row["__parsed_extra"])
+								row["__parsed_extra"] = [];
+							row["__parsed_extra"].push(_results.data[i][j]);
+						}
+						else
+							row[_fields[j]] = _results.data[i][j];
+					}
+				}
+
+				if (_config.header)
+				{
+					_results.data[i] = row;
+					if (j > _fields.length)
+						addError("FieldMismatch", "TooManyFields", "Too many fields: expected " + _fields.length + " fields but parsed " + j, i);
+					else if (j < _fields.length)
+						addError("FieldMismatch", "TooFewFields", "Too few fields: expected " + _fields.length + " fields but parsed " + j, i);
+				}
+			}
+
+			if (_config.header && _results.meta)
+				_results.meta.fields = _fields;
+			return _results;
+		}
+
+		function guessDelimiter(input)
+		{
+			var delimChoices = [",", "\t", "|", ";", Baby.RECORD_SEP, Baby.UNIT_SEP];
+			var bestDelim, bestDelta, fieldCountPrevRow;
+
+			for (var i = 0; i < delimChoices.length; i++)
+			{
+				var delim = delimChoices[i];
+				var delta = 0, avgFieldCount = 0;
+				fieldCountPrevRow = undefined;
+
+				var preview = new Parser({
+					delimiter: delim,
+					preview: 10
+				}).parse(input);
+
+				for (var j = 0; j < preview.data.length; j++)
+				{
+					var fieldCount = preview.data[j].length;
+					avgFieldCount += fieldCount;
+
+					if (typeof fieldCountPrevRow === 'undefined')
+					{
+						fieldCountPrevRow = fieldCount;
+						continue;
+					}
+					else if (fieldCount > 1)
+					{
+						delta += Math.abs(fieldCount - fieldCountPrevRow);
+						fieldCountPrevRow = fieldCount;
+					}
+				}
+
+				avgFieldCount /= preview.data.length;
+
+				if ((typeof bestDelta === 'undefined' || delta < bestDelta)
+					&& avgFieldCount > 1.99)
+				{
+					bestDelta = delta;
+					bestDelim = delim;
+				}
+			}
+
+			_config.delimiter = bestDelim;
+
+			return {
+				successful: !!bestDelim,
+				bestDelimiter: bestDelim
+			}
+		}
+
+		function guessLineEndings(input)
+		{
+			input = input.substr(0, 1024*1024);	// max length 1 MB
+
+			var r = input.split('\r');
+
+			if (r.length == 1)
+				return '\n';
+
+			var numWithN = 0;
+			for (var i = 0; i < r.length; i++)
+			{
+				if (r[i][0] == '\n')
+					numWithN++;
+			}
+
+			return numWithN >= r.length / 2 ? '\r\n' : '\r';
+		}
+
+		function tryParseFloat(val)
+		{
+			var isNumber = FLOAT.test(val);
+			return isNumber ? parseFloat(val) : val;
+		}
+
+		function addError(type, code, msg, row)
+		{
+			_results.errors.push({
+				type: type,
+				code: code,
+				message: msg,
+				row: row
+			});
+		}
+	}
+
+
+
+
+
+
+	// The core parser implements speedy and correct CSV parsing
+	function Parser(config)
+	{
+		// Unpack the config object
+		config = config || {};
+		var delim = config.delimiter;
+		var newline = config.newline;
+		var comments = config.comments;
+		var step = config.step;
+		var preview = config.preview;
+		var fastMode = config.fastMode;
+
+		// Delimiter must be valid
+		if (typeof delim !== 'string'
+			|| delim.length != 1
+			|| Baby.BAD_DELIMITERS.indexOf(delim) > -1)
+			delim = ",";
+
+		// Comment character must be valid
+		if (comments === delim)
+			throw "Comment character same as delimiter";
+		else if (comments === true)
+			comments = "#";
+		else if (typeof comments !== 'string'
+			|| Baby.BAD_DELIMITERS.indexOf(comments) > -1)
+			comments = false;
+
+		// Newline must be valid: \r, \n, or \r\n
+		if (newline != '\n' && newline != '\r' && newline != '\r\n')
+			newline = '\n';
+
+		// We're gonna need these at the Parser scope
+		var cursor = 0;
+		var aborted = false;
+
+		this.parse = function(input)
+		{
+			// For some reason, in Chrome, this speeds things up (!?)
+			if (typeof input !== 'string')
+				throw "Input must be a string";
+
+			// We don't need to compute some of these every time parse() is called,
+			// but having them in a more local scope seems to perform better
+			var inputLen = input.length,
+				delimLen = delim.length,
+				newlineLen = newline.length,
+				commentsLen = comments.length;
+			var stepIsFunction = typeof step === 'function';
+
+			// Establish starting state
+			cursor = 0;
+			var data = [], errors = [], row = [];
+
+			if (!input)
+				return returnable();
+
+			if (fastMode)
+			{
+				// Fast mode assumes there are no quoted fields in the input
+				var rows = input.split(newline);
+				for (var i = 0; i < rows.length; i++)
+				{
+					if (comments && rows[i].substr(0, commentsLen) == comments)
+						continue;
+					if (stepIsFunction)
+					{
+						data = [ rows[i].split(delim) ];
+						doStep();
+						if (aborted)
+							return returnable();
+					}
+					else
+						data.push(rows[i].split(delim));
+					if (preview && i >= preview)
+					{
+						data = data.slice(0, preview);
+						return returnable(true);
+					}
+				}
+				return returnable();
+			}
+
+			var nextDelim = input.indexOf(delim, cursor);
+			var nextNewline = input.indexOf(newline, cursor);
+
+			// Parser loop
+			for (;;)
+			{
+				// Field has opening quote
+				if (input[cursor] == '"')
+				{
+					// Start our search for the closing quote where the cursor is
+					var quoteSearch = cursor;
+
+					// Skip the opening quote
+					cursor++;
+
+					for (;;)
+					{
+						// Find closing quote
+						var quoteSearch = input.indexOf('"', quoteSearch+1);
+
+						if (quoteSearch === -1)
+						{
+							// No closing quote... what a pity
+							errors.push({
+								type: "Quotes",
+								code: "MissingQuotes",
+								message: "Quoted field unterminated",
+								row: data.length,	// row has yet to be inserted
+								index: cursor
+							});
+							return finish();
+						}
+
+						if (quoteSearch === inputLen-1)
+						{
+							// Closing quote at EOF
+							row.push(input.substring(cursor, quoteSearch).replace(/""/g, '"'));
+							data.push(row);
+							if (stepIsFunction)
+								doStep();
+							return returnable();
+						}
+
+						// If this quote is escaped, it's part of the data; skip it
+						if (input[quoteSearch+1] == '"')
+						{
+							quoteSearch++;
+							continue;
+						}
+
+						if (input[quoteSearch+1] == delim)
+						{
+							// Closing quote followed by delimiter
+							row.push(input.substring(cursor, quoteSearch).replace(/""/g, '"'));
+							cursor = quoteSearch + 1 + delimLen;
+							nextDelim = input.indexOf(delim, cursor);
+							nextNewline = input.indexOf(newline, cursor);
+							break;
+						}
+
+						if (input.substr(quoteSearch+1, newlineLen) === newline)
+						{
+							// Closing quote followed by newline
+							row.push(input.substring(cursor, quoteSearch).replace(/""/g, '"'));
+							saveRow(quoteSearch + 1 + newlineLen);
+							nextDelim = input.indexOf(delim, cursor);	// because we may have skipped the nextDelim in the quoted field
+
+							if (stepIsFunction)
+							{
+								doStep();
+								if (aborted)
+									return returnable();
+							}
+							
+							if (preview && data.length >= preview)
+								return returnable(true);
+
+							break;
+						}
+					}
+
+					continue;
+				}
+
+				// Comment found at start of new line
+				if (comments && row.length === 0 && input.substr(cursor, commentsLen) === comments)
+				{
+					if (nextNewline == -1)	// Comment ends at EOF
+						return returnable();
+					cursor = nextNewline + newlineLen;
+					nextNewline = input.indexOf(newline, cursor);
+					nextDelim = input.indexOf(delim, cursor);
+					continue;
+				}
+
+				// Next delimiter comes before next newline, so we've reached end of field
+				if (nextDelim !== -1 && (nextDelim < nextNewline || nextNewline === -1))
+				{
+					row.push(input.substring(cursor, nextDelim));
+					cursor = nextDelim + delimLen;
+					nextDelim = input.indexOf(delim, cursor);
+					continue;
+				}
+
+				// End of row
+				if (nextNewline !== -1)
+				{
+					row.push(input.substring(cursor, nextNewline));
+					saveRow(nextNewline + newlineLen);
+
+					if (stepIsFunction)
+					{
+						doStep();
+						if (aborted)
+							return returnable();
+					}
+
+					if (preview && data.length >= preview)
+						return returnable(true);
+
+					continue;
+				}
+
+				break;
+			}
+
+
+			return finish();
+
+
+			// Appends the remaining input from cursor to the end into
+			// row, saves the row, calls step, and returns the results.
+			function finish()
+			{
+				row.push(input.substr(cursor));
+				data.push(row);
+				cursor = inputLen;	// important in case parsing is paused
+				if (stepIsFunction)
+					doStep();
+				return returnable();
+			}
+
+			// Appends the current row to the results. It sets the cursor
+			// to newCursor and finds the nextNewline. The caller should
+			// take care to execute user's step function and check for
+			// preview and end parsing if necessary.
+			function saveRow(newCursor)
+			{
+				data.push(row);
+				row = [];
+				cursor = newCursor;
+				nextNewline = input.indexOf(newline, cursor);
+			}
+
+			// Returns an object with the results, errors, and meta.
+			function returnable(stopped)
+			{
+				return {
+					data: data,
+					errors: errors,
+					meta: {
+						delimiter: delim,
+						linebreak: newline,
+						aborted: aborted,
+						truncated: !!stopped
+					}
+				};
+			}
+
+			// Executes the user's step function and resets data & errors.
+			function doStep()
+			{
+				step(returnable());
+				data = [], errors = [];
+			}
+		};
+
+		// Sets the abort flag
+		this.abort = function()
+		{
+			aborted = true;
+		};
+
+		// Gets the cursor position
+		this.getCharIndex = function()
+		{
+			return cursor;
+		};
+	}
+
+
+
+
+	// Replaces bad config values with good, default ones
+	function copyAndValidateConfig(origConfig)
+	{
+		if (typeof origConfig !== 'object')
+			origConfig = {};
+
+		var config = copy(origConfig);
+
+		if (typeof config.delimiter !== 'string'
+			|| config.delimiter.length != 1
+			|| Baby.BAD_DELIMITERS.indexOf(config.delimiter) > -1)
+			config.delimiter = DEFAULTS.delimiter;
+
+		if (config.newline != '\n'
+			&& config.newline != '\r'
+			&& config.newline != '\r\n')
+			config.newline = DEFAULTS.newline;
+
+		if (typeof config.header !== 'boolean')
+			config.header = DEFAULTS.header;
+
+		if (typeof config.dynamicTyping !== 'boolean')
+			config.dynamicTyping = DEFAULTS.dynamicTyping;
+
+		if (typeof config.preview !== 'number')
+			config.preview = DEFAULTS.preview;
+
+		if (typeof config.step !== 'function')
+			config.step = DEFAULTS.step;
+
+		if (typeof config.complete !== 'function')
+			config.complete = DEFAULTS.complete;
+
+		if (typeof config.skipEmptyLines !== 'boolean')
+			config.skipEmptyLines = DEFAULTS.skipEmptyLines;
+
+		if (typeof config.fastMode !== 'boolean')
+			config.fastMode = DEFAULTS.fastMode;
+
+		return config;
+	}
+
+	function copy(obj)
+	{
+		if (typeof obj !== 'object')
+			return obj;
+		var cpy = obj instanceof Array ? [] : {};
+		for (var key in obj)
+			cpy[key] = copy(obj[key]);
+		return cpy;
+	}
+
+	function isFunction(func)
+	{
+		return typeof func === 'function';
+	}
+
+
+
+
+
+
+	// export to Node...
+	if ( typeof module !== 'undefined' && module.exports ) {
+		module.exports = Baby;
+	}
+
+	// ...or as AMD module...
+	else if ( typeof define === 'function' && define.amd ) {
+		define( function () { return Baby; });
+	}
+
+	// ...or as browser global
+	else {
+		global.Baby = Baby;
+	}
+
+})(typeof window !== 'undefined' ? window : this);
+
+},{}],8:[function(require,module,exports){
 module.exports = require('./lib/chai');
 
-},{"./lib/chai":10}],10:[function(require,module,exports){
+},{"./lib/chai":9}],9:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -2083,7 +3101,7 @@ exports.use(should);
 var assert = require('./chai/interface/assert');
 exports.use(assert);
 
-},{"./chai/assertion":11,"./chai/config":12,"./chai/core/assertions":13,"./chai/interface/assert":14,"./chai/interface/expect":15,"./chai/interface/should":16,"./chai/utils":30,"assertion-error":38}],11:[function(require,module,exports){
+},{"./chai/assertion":10,"./chai/config":11,"./chai/core/assertions":12,"./chai/interface/assert":13,"./chai/interface/expect":14,"./chai/interface/should":15,"./chai/utils":29,"assertion-error":37}],10:[function(require,module,exports){
 /*!
  * chai
  * http://chaijs.com
@@ -2216,7 +3234,7 @@ module.exports = function (_chai, util) {
   });
 };
 
-},{"./config":12}],12:[function(require,module,exports){
+},{"./config":11}],11:[function(require,module,exports){
 module.exports = {
 
   /**
@@ -2273,7 +3291,7 @@ module.exports = {
 
 };
 
-},{}],13:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 /*!
  * chai
  * http://chaijs.com
@@ -4091,7 +5109,7 @@ module.exports = function (chai, _) {
   });
 };
 
-},{}],14:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -5642,7 +6660,7 @@ module.exports = function (chai, util) {
   ('isNotFrozen', 'notFrozen');
 };
 
-},{}],15:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -5677,7 +6695,7 @@ module.exports = function (chai, util) {
   };
 };
 
-},{}],16:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011-2014 Jake Luer <jake@alogicalparadox.com>
@@ -5777,7 +6795,7 @@ module.exports = function (chai, util) {
   chai.Should = loadShould;
 };
 
-},{}],17:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 /*!
  * Chai - addChainingMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -5890,7 +6908,7 @@ module.exports = function (ctx, name, method, chainingBehavior) {
   });
 };
 
-},{"../config":12,"./flag":21,"./transferFlags":37}],18:[function(require,module,exports){
+},{"../config":11,"./flag":20,"./transferFlags":36}],17:[function(require,module,exports){
 /*!
  * Chai - addMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -5935,7 +6953,7 @@ module.exports = function (ctx, name, method) {
   };
 };
 
-},{"../config":12,"./flag":21}],19:[function(require,module,exports){
+},{"../config":11,"./flag":20}],18:[function(require,module,exports){
 /*!
  * Chai - addProperty utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -5984,7 +7002,7 @@ module.exports = function (ctx, name, getter) {
   });
 };
 
-},{"../config":12,"./flag":21}],20:[function(require,module,exports){
+},{"../config":11,"./flag":20}],19:[function(require,module,exports){
 /*!
  * Chai - expectTypes utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6027,7 +7045,7 @@ module.exports = function (obj, types) {
   }
 };
 
-},{"./flag":21,"assertion-error":38,"type-detect":43}],21:[function(require,module,exports){
+},{"./flag":20,"assertion-error":37,"type-detect":42}],20:[function(require,module,exports){
 /*!
  * Chai - flag utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6061,7 +7079,7 @@ module.exports = function (obj, key, value) {
   }
 };
 
-},{}],22:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 /*!
  * Chai - getActual utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6081,7 +7099,7 @@ module.exports = function (obj, args) {
   return args.length > 4 ? args[4] : obj._obj;
 };
 
-},{}],23:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 /*!
  * Chai - getEnumerableProperties utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6108,7 +7126,7 @@ module.exports = function getEnumerableProperties(object) {
   return result;
 };
 
-},{}],24:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 /*!
  * Chai - message composition utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6160,7 +7178,7 @@ module.exports = function (obj, args) {
   return flagMsg ? flagMsg + ': ' + msg : msg;
 };
 
-},{"./flag":21,"./getActual":22,"./inspect":31,"./objDisplay":32}],25:[function(require,module,exports){
+},{"./flag":20,"./getActual":21,"./inspect":30,"./objDisplay":31}],24:[function(require,module,exports){
 /*!
  * Chai - getName utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6182,7 +7200,7 @@ module.exports = function (func) {
   return match && match[1] ? match[1] : "";
 };
 
-},{}],26:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 /*!
  * Chai - getPathInfo utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6294,7 +7312,7 @@ function _getPathValue (parsed, obj, index) {
   return res;
 }
 
-},{"./hasProperty":29}],27:[function(require,module,exports){
+},{"./hasProperty":28}],26:[function(require,module,exports){
 /*!
  * Chai - getPathValue utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6338,7 +7356,7 @@ module.exports = function(path, obj) {
   return info.value;
 }; 
 
-},{"./getPathInfo":26}],28:[function(require,module,exports){
+},{"./getPathInfo":25}],27:[function(require,module,exports){
 /*!
  * Chai - getProperties utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6375,7 +7393,7 @@ module.exports = function getProperties(object) {
   return result;
 };
 
-},{}],29:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 /*!
  * Chai - hasProperty utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6440,7 +7458,7 @@ module.exports = function hasProperty(name, obj) {
   return name in obj;
 };
 
-},{"type-detect":43}],30:[function(require,module,exports){
+},{"type-detect":42}],29:[function(require,module,exports){
 /*!
  * chai
  * Copyright(c) 2011 Jake Luer <jake@alogicalparadox.com>
@@ -6572,7 +7590,7 @@ exports.addChainableMethod = require('./addChainableMethod');
 
 exports.overwriteChainableMethod = require('./overwriteChainableMethod');
 
-},{"./addChainableMethod":17,"./addMethod":18,"./addProperty":19,"./expectTypes":20,"./flag":21,"./getActual":22,"./getMessage":24,"./getName":25,"./getPathInfo":26,"./getPathValue":27,"./hasProperty":29,"./inspect":31,"./objDisplay":32,"./overwriteChainableMethod":33,"./overwriteMethod":34,"./overwriteProperty":35,"./test":36,"./transferFlags":37,"deep-eql":39,"type-detect":43}],31:[function(require,module,exports){
+},{"./addChainableMethod":16,"./addMethod":17,"./addProperty":18,"./expectTypes":19,"./flag":20,"./getActual":21,"./getMessage":23,"./getName":24,"./getPathInfo":25,"./getPathValue":26,"./hasProperty":28,"./inspect":30,"./objDisplay":31,"./overwriteChainableMethod":32,"./overwriteMethod":33,"./overwriteProperty":34,"./test":35,"./transferFlags":36,"deep-eql":38,"type-detect":42}],30:[function(require,module,exports){
 // This is (almost) directly from Node.js utils
 // https://github.com/joyent/node/blob/f8c335d0caf47f16d31413f89aa28eda3878e3aa/lib/util.js
 
@@ -6907,7 +7925,7 @@ function objectToString(o) {
   return Object.prototype.toString.call(o);
 }
 
-},{"./getEnumerableProperties":23,"./getName":25,"./getProperties":28}],32:[function(require,module,exports){
+},{"./getEnumerableProperties":22,"./getName":24,"./getProperties":27}],31:[function(require,module,exports){
 /*!
  * Chai - flag utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -6958,7 +7976,7 @@ module.exports = function (obj) {
   }
 };
 
-},{"../config":12,"./inspect":31}],33:[function(require,module,exports){
+},{"../config":11,"./inspect":30}],32:[function(require,module,exports){
 /*!
  * Chai - overwriteChainableMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -7013,7 +8031,7 @@ module.exports = function (ctx, name, method, chainingBehavior) {
   };
 };
 
-},{}],34:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 /*!
  * Chai - overwriteMethod utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -7066,7 +8084,7 @@ module.exports = function (ctx, name, method) {
   }
 };
 
-},{}],35:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /*!
  * Chai - overwriteProperty utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -7122,7 +8140,7 @@ module.exports = function (ctx, name, getter) {
   });
 };
 
-},{}],36:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 /*!
  * Chai - test utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -7150,7 +8168,7 @@ module.exports = function (obj, args) {
   return negate ? !expr : expr;
 };
 
-},{"./flag":21}],37:[function(require,module,exports){
+},{"./flag":20}],36:[function(require,module,exports){
 /*!
  * Chai - transferFlags utility
  * Copyright(c) 2012-2014 Jake Luer <jake@alogicalparadox.com>
@@ -7196,7 +8214,7 @@ module.exports = function (assertion, object, includeAll) {
   }
 };
 
-},{}],38:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 /*!
  * assertion-error
  * Copyright(c) 2013 Jake Luer <jake@qualiancy.com>
@@ -7310,10 +8328,10 @@ AssertionError.prototype.toJSON = function (stack) {
   return props;
 };
 
-},{}],39:[function(require,module,exports){
+},{}],38:[function(require,module,exports){
 module.exports = require('./lib/eql');
 
-},{"./lib/eql":40}],40:[function(require,module,exports){
+},{"./lib/eql":39}],39:[function(require,module,exports){
 /*!
  * deep-eql
  * Copyright(c) 2013 Jake Luer <jake@alogicalparadox.com>
@@ -7572,10 +8590,10 @@ function objectEqual(a, b, m) {
   return true;
 }
 
-},{"buffer":2,"type-detect":41}],41:[function(require,module,exports){
+},{"buffer":1,"type-detect":40}],40:[function(require,module,exports){
 module.exports = require('./lib/type');
 
-},{"./lib/type":42}],42:[function(require,module,exports){
+},{"./lib/type":41}],41:[function(require,module,exports){
 /*!
  * type-detect
  * Copyright(c) 2013 jake luer <jake@alogicalparadox.com>
@@ -7719,9 +8737,9 @@ Library.prototype.test = function (obj, type) {
   }
 };
 
-},{}],43:[function(require,module,exports){
-arguments[4][41][0].apply(exports,arguments)
-},{"./lib/type":44,"dup":41}],44:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
+arguments[4][40][0].apply(exports,arguments)
+},{"./lib/type":43,"dup":40}],43:[function(require,module,exports){
 /*!
  * type-detect
  * Copyright(c) 2013 jake luer <jake@alogicalparadox.com>
@@ -7857,7 +8875,7 @@ Library.prototype.test = function(obj, type) {
   }
 };
 
-},{}],45:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 module.exports = Table
 
 function Table() {
@@ -8296,6 +9314,94 @@ Table.log = function(obj, format, cb) {
 Table.prototype.log = function() {
   console.log(this.toString())
 }
+
+},{}],45:[function(require,module,exports){
+'use strict';
+
+var hasOwn = Object.prototype.hasOwnProperty;
+var toStr = Object.prototype.toString;
+
+var isArray = function isArray(arr) {
+	if (typeof Array.isArray === 'function') {
+		return Array.isArray(arr);
+	}
+
+	return toStr.call(arr) === '[object Array]';
+};
+
+var isPlainObject = function isPlainObject(obj) {
+	if (!obj || toStr.call(obj) !== '[object Object]') {
+		return false;
+	}
+
+	var hasOwnConstructor = hasOwn.call(obj, 'constructor');
+	var hasIsPrototypeOf = obj.constructor && obj.constructor.prototype && hasOwn.call(obj.constructor.prototype, 'isPrototypeOf');
+	// Not own constructor property must be Object
+	if (obj.constructor && !hasOwnConstructor && !hasIsPrototypeOf) {
+		return false;
+	}
+
+	// Own properties are enumerated firstly, so to speed up,
+	// if last one is own, then all properties are own.
+	var key;
+	for (key in obj) {/**/}
+
+	return typeof key === 'undefined' || hasOwn.call(obj, key);
+};
+
+module.exports = function extend() {
+	var options, name, src, copy, copyIsArray, clone,
+		target = arguments[0],
+		i = 1,
+		length = arguments.length,
+		deep = false;
+
+	// Handle a deep copy situation
+	if (typeof target === 'boolean') {
+		deep = target;
+		target = arguments[1] || {};
+		// skip the boolean and the target
+		i = 2;
+	} else if ((typeof target !== 'object' && typeof target !== 'function') || target == null) {
+		target = {};
+	}
+
+	for (; i < length; ++i) {
+		options = arguments[i];
+		// Only deal with non-null/undefined values
+		if (options != null) {
+			// Extend the base object
+			for (name in options) {
+				src = target[name];
+				copy = options[name];
+
+				// Prevent never-ending loop
+				if (target !== copy) {
+					// Recurse if we're merging plain objects or arrays
+					if (deep && copy && (isPlainObject(copy) || (copyIsArray = isArray(copy)))) {
+						if (copyIsArray) {
+							copyIsArray = false;
+							clone = src && isArray(src) ? src : [];
+						} else {
+							clone = src && isPlainObject(src) ? src : {};
+						}
+
+						// Never move original objects, clone them
+						target[name] = extend(deep, clone, copy);
+
+					// Don't bring in undefined values
+					} else if (typeof copy !== 'undefined') {
+						target[name] = copy;
+					}
+				}
+			}
+		}
+	}
+
+	// Return the modified object
+	return target;
+};
+
 
 },{}],46:[function(require,module,exports){
 /*--------------------------------------------------------------------------
@@ -23763,672 +24869,332 @@ Date.addLocale('zh-TW', {
 },{}],49:[function(require,module,exports){
 'use strict';
 
-//
-// Module for getting data to the browser via HTTP.
-//
-
-module.exports = function (url) {
-
-	return {
-
-		//
-		// Invoke HTTP GET to retreive data.
-		//
-		read: function () {
-			return new Promise(function (resolve, reject) {
-				$.get(url)
-					.done(function (data) {
-						resolve(data);
-					})
-					.fail(function (err) {
-						reject(err);
-					});
-			});
-		},
-
-		//
-		// Invoke HTTP POST to push data.
-		//
-		write: function (textData) {
-			//todo:
-		},
-
-	};
-};
-
-},{}],50:[function(require,module,exports){
-'use strict';
-
-// 
-// Base class for columns classes.
-//
-
-var assert = require('chai').assert; 
-var E = require('linq');
-
-
-/**
- * Base class for columns.
- *
- * getName - Get the name of the column.
- * getValues - Get the values for each entry in the series.
- * getIndex - Get the index for the column.
- */
-var BaseColumn = function () {	
-	
-};
-
-/**
- * Skip a number of rows in the column.
- *
- * @param {int} numRows - Number of rows to skip.
- */
-BaseColumn.prototype.skip = function (numRows) {
-	assert.isNumber(numRows, "Expected 'numRows' parameter to 'skip' function to be a number.");
-
-	var LazyColumn = require('./lazycolumn'); // Require here to prevent circular ref.
-	
-	var self = this;
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			return E
-				.from(self.getValues())
-				.skip(numRows)
-				.toArray();
-		},
-		function () {
-			return self.getIndex().skip(numRows);
-		}
-	); 	
-};
-
-/**
- * Take a number of rows in the column.
- *
- * @param {int} numRows - Number of rows to take.
- */
-BaseColumn.prototype.take = function (numRows) {
-	assert.isNumber(numRows, "Expected 'numRows' parameter to 'take' function to be a number.");
-
-	var LazyColumn = require('./lazycolumn'); // Require here to prevent circular ref.
-	
-	var self = this;
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			return E
-				.from(self.getValues())
-				.take(numRows)
-				.toArray();
-		},
-		function () {
-			return self.getIndex().take(numRows);
-		}
-	); 	
-};
-
-/**
- * Filter a column by a predicate selector.
- *
- * @param {function} filterSelectorPredicate - Predicte function to filter rows of the column.
- */
-BaseColumn.prototype.where = function (filterSelectorPredicate) {
-	assert.isFunction(filterSelectorPredicate, "Expected 'filterSelectorPredicate' parameter to 'where' function to be a function.");
-
-	var self = this;
-
-	var cachedFilteredIndexAndValues = null;
-
-	//
-	// Lazy  execute the filtering.
-	//
-	var executeLazyWhere = function () {
-
-		if (cachedFilteredIndexAndValues) {
-			return cachedFilteredIndexAndValues;
-		}
-
-		cachedFilteredIndexAndValues = E
-			.from(self.getIndex().getValues())
-			.zip(self.getValues(), function (index, value) {
-				return [index, value];
-			})
-			.where(function (data) {
-				var value = data[1];
-				return filterSelectorPredicate(value);
-			})
-			.toArray();
-		return cachedFilteredIndexAndValues;
-	}
-
-
-	var LazyColumn = require('./lazycolumn');
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			return E.from(executeLazyWhere())
-				.select(function (data) {
-					return data[1]; // Value
-				})
-				.toArray();
-		},
-		function () {
-			var LazyIndex = require('./lazyindex');
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					return E.from(executeLazyWhere())
-						.select(function (data) {
-							return data[0]; // Index
-						})
-						.toArray();
-				}
-			);
-		}
-	); 	
-};
-
-/**
- * Generate a new column based on the results of the selector function.
- *
- * @param {function} selector - Selector function that transforms each value to a different data structure.
- */
-BaseColumn.prototype.select = function (selector) {
-	assert.isFunction(selector, "Expected 'selector' parameter to 'select' function to be a function.");
-
-	var self = this;
-
-	var LazyColumn = require('./lazycolumn');
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			return E
-				.from(self.getValues())
-				.select(function (value) {
-					return selector(value);
-				})
-				.toArray();
-		},
-		function () {
-			return self.getIndex();
-		}
-	); 	
-};
-
-/**
- * Generate a new column based on the results of the selector function.
- *
- * @param {function} selector - Selector function that transforms each value to a different data structure.
- */
-BaseColumn.prototype.selectMany = function (selector) {
-	assert.isFunction(selector, "Expected 'selector' parameter to 'selectMany' function to be a function.");
-
-	var self = this;
-
-	var newIndexAndNewValues = null;
-	var newValues = null;
-
-	var lazyEvaluate = function () {
-
-		if (newIndexAndNewValues) {
-			return;
-		}
-
-		newIndexAndNewValues = E.from(self.getIndex().getValues())
-			.zip(self.getValues(), function (index, value) {
-				return [index, selector(value)];
-			})
-			.toArray();
-
-		newValues = E.from(newIndexAndNewValues)
-			.selectMany(function (data) {
-				return data[1]; // Extract expanded values.
-			})
-			.toArray();
-	};
-
-	var LazyColumn = require('./lazycolumn');
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			lazyEvaluate();
-			return newValues;
-		},
-		function () {
-			var LazyIndex = require('./lazyindex');
-
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					lazyEvaluate();
-					var indexValues = E.from(newIndexAndNewValues)
-						.selectMany(function (data) {
-							var index = data[0];
-							var values = data[1];
-							return E.range(0, values.length)
-								.select(function (_) {
-									return index;
-								})
-								.toArray();
-						})
-						.toArray();
-					return indexValues;
-				}
-			);
-		}
-	); 	
-};
-
-//
-// Throw an exception if the sort method doesn't make sense.
-//
-var validateSortMethod = function (sortMethod) {
-	assert.isString(sortMethod);
-	assert(
-		sortMethod === 'orderBy' || 
-	   sortMethod === 'orderByDescending' ||
-	   sortMethod === 'thenBy' ||
-	   sortMethod === 'thenByDescending', 
-	   "Expected 'sortMethod' to be one of 'orderBy', 'orderByDescending', 'thenBy' or 'thenByDescending', instead it is '" + sortMethod + "'."
-   );
-};
-
-//
-// Execute a batched sorting command.
-//
-var executeOrderBy = function (self, batch) {
-
-	assert.isObject(self);
-	assert.isArray(batch);
-	assert(batch.length > 0);
-
-	var cachedSorted = null;
-
-	//
-	// Don't invoke the sort until we really know what we need.
-	//
-	var executeLazySort = function () {
-		if (cachedSorted) {
-			return cachedSorted;
-		}
-
-		batch.forEach(function (orderCmd) {
-			assert.isObject(orderCmd);
-			assert.isFunction(orderCmd.sortSelector);
-			validateSortMethod(orderCmd.sortMethod);
-		});
-
-		var valuesWithIndex = E.from(self.getIndex().getValues())
-			.zip(self.getValues(), function (index, value) {
-				return [index, value];
-			})
-			.toArray();	
-
-		cachedSorted = E.from(batch)
-			.aggregate(E.from(valuesWithIndex), function (unsorted, orderCmd) {
-				return unsorted[orderCmd.sortMethod](function (row) {
-					var value = row[1];
-					return orderCmd.sortSelector(value);
-				}); 
-			})
-			.toArray();
-
-		return cachedSorted;
-	};
-
-	var LazyDataFrame = require('./lazydataframe');
-
-	return new LazyDataFrame(
-		function () {
-			return self.getColumnNames();
-		},
-		function () {
-			return E.from(executeLazySort())
-				.select(function (row) {
-					return row[1]; // Extract the value (minus the index) from the sorted data.					
-				})
-				.toArray();
-		},
-		function () {
-			var LazyIndex = require('./lazyindex');
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					return E.from(executeLazySort())
-						.select(function (row) {
-							return row[0]; // Extract the index from the sorted data.
-						})
-						.toArray();
-				}
-			);
-		}
-	);
-};
-
-//
-// Order by values in a partcular column, either ascending or descending
-//
-var orderBy = function (self, sortMethod, sortSelector) {
-	assert.isObject(self);
-	validateSortMethod(sortMethod);
-	assert.isFunction(sortSelector);
-
-	var batchOrder = [
-		{ 
-			sortSelector: sortSelector, 
-			sortMethod: sortMethod 
-		}
-	];
-
-	var sortedDataFrame = executeOrderBy(self, batchOrder);
-	sortedDataFrame.thenBy = orderThenBy(self, batchOrder, 'thenBy');
-	sortedDataFrame.thenByDescending = orderThenBy(self, batchOrder, 'thenByDescending');	
-	return sortedDataFrame;
-};
-
-//
-// Generates a thenBy function that is attached to already ordered data frames.
-//
-var orderThenBy = function (self, batch, nextSortMethod) {
-	assert.isObject(self);
-	assert.isArray(batch);
-	assert(batch.length > 0);
-	validateSortMethod(nextSortMethod);
-	
-	return function (sortSelector) {
-		assert.isFunction(sortSelector, "Expected parameter 'sortSelector' to be a function")
-
-		var extendedBatch = batch.concat([
-			{
-				sortSelector: sortSelector,
-				sortMethod: nextSortMethod,
-			},
-		]);
-
-		var sortedDataFrame = executeOrderBy(self, extendedBatch);
-		sortedDataFrame.thenBy = orderThenBy(self, extendedBatch, 'thenBy');
-		sortedDataFrame.thenByDescending = orderThenBy(self, extendedBatch, 'thenByDescending');		
-		return sortedDataFrame;
-	};	
-};
-
-/**
- * Sorts the column by value (ascending). 
- */
-BaseColumn.prototype.order = function () {
-
-	var self = this;
-	return orderBy(self, 'orderBy', function (value) { 
-		return value; 
-	});
-};
-
-/**
- * Sorts the column by value (descending). 
- */
-BaseColumn.prototype.orderDescending = function (optionalSortSelector) {
-
-	var self = this;
-	return orderBy(self, 'orderByDescending', function (value) {
-		return value;
-	});
-};
-
-/**
- * Sorts the column by sort selector (ascending). 
- * 
- * @param {function} sortSelector - An function to select a value to sort by.
- */
-BaseColumn.prototype.orderBy = function (sortSelector) {
-
-	assert.isFunction
-
-	var self = this;
-	return orderBy(self, 'orderBy', sortSelector);
-};
-
-/**
- * Sorts the column by sort selector (descending). 
- * 
- * @param {function} sortSelector - An function to select a value to sort by.
- */
-BaseColumn.prototype.orderByDescending = function (sortSelector) {
-
-	var self = this;
-	return orderBy(self, 'orderByDescending', sortSelector);
-};
-
-/**
- * Get a subset of rows from the column.
- *
- * @param {int} index - Index where the subset starts.
- * @param {int} count - Number of rows to include in the subset.
- */
-BaseColumn.prototype.getRowsSubset = function (index, count) {
-	assert.isNumber(index, "Expected 'index' parameter to getRowsSubset to be an integer.");
-	assert.isNumber(index, "Expected 'count' parameter to getRowsSubset to be an integer.");
-
-	var self = this;
-
-	var LazyColumn = require('./lazycolumn'); // Require here to prevent circular ref.
-
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			return E.from(self.getValues())
-				.skip(index)
-				.take(count)
-				.toArray();
-		},
-		function () {
-			return self.getIndex().getRowsSubset(index, count);
-		}
-	);
-};
-
-/** 
- * Execute code over a moving window to produce a new data frame.
- *
- * @param {integer} period - The number of entries to include in the window.
- * @param {function} fn - The function to invoke on each window.
- */
-BaseColumn.prototype.rollingWindow = function (period, fn) {
-
-	assert.isNumber(period, "Expected 'period' parameter to 'rollingWindow' to be a number.");
-	assert.isFunction(fn, "Expected 'fn' parameter to 'rollingWindow' to be a function.");
-
-	var self = this;
-
-	//todo: make this properly lazy
-
-	var index = self.getIndex().getValues();
-	var values = self.getValues();
-
-	if (values.length == 0) {
-		var Column = require('./column');
-		return new Column(self.getName(), []);
-	}
-
-	var newIndexAndValues = E.range(0, values.length-period+1)
-		.select(function (rowIndex) {
-			var _index = E.from(index).skip(rowIndex).take(period).toArray();
-			var _values = E.from(values).skip(rowIndex).take(period).toArray();
-			return fn(_index, _values, rowIndex);
-		})
-		.toArray();
-
-	var LazyColumn = require('./lazycolumn');
-
-	return new LazyColumn(
-		self.getName(), 
-		function () {
-			return E.from(newIndexAndValues)
-				.select(function (indexAndValue) {
-					return indexAndValue[1];
-				})
-				.toArray();
-		},
-		function () {
-			var LazyIndex = require('./lazyindex');
-
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					return E.from(newIndexAndValues)
-						.select(function (indexAndValue) {
-							return indexAndValue[0];
-						})
-						.toArray();					
-				}
-			);
-		}
-	);
-};
-
-/**
- * Create a new column, reindexed from this column.
- *
- * @param {index} newIndex - The index used to generate the new column.
- */
-BaseColumn.prototype.reindex = function (newIndex) {
-	assert.isObject(newIndex, "Expected 'newIndex' parameter to 'reindex' function to be an index.");
-
-	var self = this;
-
-	var LazyColumn = require('./lazycolumn');
-
-	return new LazyColumn(
-		self.getName(),
-		function () {
-			//
-			// Generate a map to relate an index value to a column value.
-			//
-			var indexMap = {};
-			var indexExists = {};
-
-			E.from(self.getIndex().getValues())
-				.zip(self.getValues(), 
-					function (indexValue, columnValue) {
-						return [indexValue, columnValue];
-					}
-				)
-				.toArray()
-				.forEach(function (pair) {
-					var index = pair[0];
-					var value = pair[1];
-
-					if (indexExists[index]) {
-						throw new Error("Duplicate index detected, failed to 'reindex'");
-					}
-
-					indexMap[index] = value;
-					indexExists[index] = true;
-				});
-
-			//
-			// Return the columns values in the order specified by the new index.
-			//
-			var newValues = E.from(newIndex.getValues())
-				.select(function (newIndexValue) {
-					return indexMap[newIndexValue];
-				})
-				.toArray();
-
-			return newValues;
-		},
-		function () {
-			return newIndex;
-		}
-	);
-};
-
-/** 
- * Format the data frame for display as a string.
- */
-BaseColumn.prototype.toString = function () {
-
-	var self = this;
-	var Table = require('easy-table');
-
-	var index = self.getIndex().getValues();
-	var header = [self.getIndex().getName(), self.getName()];
-	var rows = E.from(self.getValues())
-			.select(function (value, rowIndex) { 
-				return [index[rowIndex], value];
-			})
-			.toArray()
-
-	var t = new Table();
-	rows.forEach(function (row, rowIndex) {
-		row.forEach(function (cell, cellIndex) {
-			t.cell(header[cellIndex], cell);
-		});
-		t.newRow();
-	});
-
-	return t.toString();
-};
-
-/**
- * Compute the percent change for each row after the first.
- * Percentages are expressed as 0-1 values.
- */
-BaseColumn.prototype.percentChange = function () {
-
-	var self = this;
-	return self.rollingWindow(2, function (index, window) {
-		var amountChange = window[1] - window[0];
-		return [index[1], amountChange / window[0]];
-	});
-};
-
-module.exports = BaseColumn;
-},{"./column":54,"./lazycolumn":58,"./lazydataframe":59,"./lazyindex":60,"chai":9,"easy-table":45,"linq":46}],51:[function(require,module,exports){
-'use strict';
-
 // 
 // Base class for data frame classes.
 //
 
-var LazyColumn = require('./lazycolumn');
-var LazyIndex = require('./lazyindex');
+var Series = require('./series');
+var Index = require('./index');
+var ArrayIterator = require('./iterators/array');
+var MultiIterator = require('./iterators/multi');
+var SkipIterator = require('./iterators/skip');
+var SkipWhileIterator = require('./iterators/skip-while');
+var BabyParse = require('babyparse');
+var SelectIterator = require('../src/iterators/select');
+var SelectManyIterator = require('../src/iterators/select-many');
+var TakeIterator = require('../src/iterators/take');
+var TakeWhileIterator = require('../src/iterators/take-while');
+var WhereIterator = require('../src/iterators/where');
+var CountIterator = require('../src/iterators/count');
+var EmptyIterator = require('../src/iterators/empty');
+var utils = require('./utils');
+var extend = require('extend');
 
 var assert = require('chai').assert; 
 var E = require('linq');
 
-/**
- * Base class for data frames.
- *
- * Derived classes must implement:
- *
- * getIndex - Get the index for the data frame.
- * getColumnNames - Get the columns for the data frame.
- * getValues - Get the values for the data frame.
- */
-var BaseDataFrame = function () {
+var validateIterator = require('./iterators/validate');
+
+//
+// Helper function to grab a column index from a 'column name or index' parameter.
+//
+var parseColumnNameOrIndexToIndex = function (dataFrame, columnNameOrIndex, failForNonExistantColumn) {
+
+	if (Object.isString(columnNameOrIndex)) {
+		var columnIndex = dataFrame.getColumnIndex(columnNameOrIndex);
+		if (failForNonExistantColumn && columnIndex < 0) {
+			throw new Error("Failed to find column with name '" + columnNameOrIndex + "'.");
+		}
+		return columnIndex;
+	}
+	else {	
+		assert.isNumber(columnNameOrIndex, "Expected 'columnNameOrIndex' parameter to be either a string or index that specifies an existing column.");
+
+		return columnNameOrIndex;
+	}
 };
 
-//
-// Map a row of data to a JS object with column names as fields.
-//
-var mapRowByColumns = function (self, row) {
-	var copy = E.from(row).toArray();
+var parseColumnNameOrIndexToName = function (dataFrame, columnNameOrIndex, failForNonExistantColumn) {
 
-	E.from(self.getColumnNames())
-		.select(function (columnName, columnIndex) {
-			return [columnName, columnIndex];
-		})
-		.toArray()
-		.forEach(
-			function (column) {
-				var columnName = column[0];
-				var columnIndex = column[1];
-				copy[columnName] = copy[columnIndex];
+	if (Object.isString(columnNameOrIndex)) {
+		return columnNameOrIndex;
+	}
+	else {	
+		assert.isNumber(columnNameOrIndex, "Expected 'columnNameOrIndex' parameter to be either a string or index that specifies an existing column.");
+
+		return dataFrame.getColumnName(columnNameOrIndex);
+	}
+};
+
+/**
+ * Constructor for DataFrame.
+ *
+ * @param {object} config - Specifies content and configuration for the data frame.
+ */
+var DataFrame = function (config) {
+
+	var self = this;
+
+	if (!config) {
+		self._columnNames = [];
+		self._iterable = function () {
+			return new EmptyIterator();
+		};
+		return;
+	}
+
+	if (config && config.iterable) {
+
+		assert.isFunction(config.iterable, "Expected 'iterable' field of 'config' parameter to DataFrame constructor to be a function that returns an index/value pairs iterator.");
+
+		var iterable = config.iterable;
+
+		if (config.columnNames) {
+			if (!Object.isFunction(config.columnNames)) {
+				assert.isArray(config.columnNames, "Expected 'columnNames' field of 'config' parameter to DataFrame constructor to be an array of column names or function that returns an array of column names.");
+			};
+
+			self._columnNames = config.columnNames;
+		}
+		else {
+			self._columnNames = function () { //todo: could just make this the default behavior if no columns are specified ?!
+				var iterator = iterable();
+				if (!iterator.moveNext()) {
+					return [];
+				}
+
+				return Object.keys(iterator.getCurrent()[1]);
+			};
+		}
+		self._iterable = iterable;
+		return;
+	}
+
+	var columnNames;
+	var rows;
+	var index;
+
+	assert.isObject(config, "Expected 'config' parameter to DataFrame constructor to be an object with options for initialisation.");
+
+	if (config.index) {
+		var inputIndex = config.index;
+
+		if (Object.isArray(inputIndex)) {
+			index = function () {
+				return new ArrayIterator(inputIndex);
+			};		
+		}
+		else {
+			assert.isObject(config.index, "Expected 'index' member of 'config' parameter to DataFrame constructor to be an object.");			
+
+			index = function () {
+				return inputIndex.getIterator();
+			};
+		}
+	}
+	else {
+		index = function () {
+			return new CountIterator();
+		};
+	}
+
+	if (config.columnNames) {
+		if (!Object.isFunction(config.columnNames)) {
+			assert.isArray(config.columnNames, "Expected 'columnNames' member of 'config' parameter to DataFrame constructor to be an array of strings or a function that produces an array of strings.");
+
+			config.columnNames.forEach(function (columnName) {
+				assert.isString(columnName, "Expected 'columnNames' member of 'config' parameter to DataFrame constructor to be an array of strings or a function that produces an array of strings.");
+			});
+		}
+
+		if (!config.rows) {
+			throw new Error("Expected to find a 'rows' member of 'config' parameter to DataFrame constructor.");
+		}
+
+		columnNames = config.columnNames;
+
+	 	if (Object.isFunction(config.rows)) {
+			rows = function () {
+				return new SelectIterator(
+					config.rows(),
+					function (row) {
+						return E.from(columnNames)
+							.select(function (columnName, columnIndex) {
+								return [columnName, columnIndex];
+							})
+							.toObject(
+								function (column) {
+									return column[0];
+								},
+								function (column) {
+									return row[column[1]];
+								}
+							);							
+					}
+				);
+			};
+		}
+		else {
+			assert.isArray(config.rows, "Expected 'rows' member of 'config' parameter to DataFrame constructor to be an array of rows.");
+
+			if (config.debug) {
+				config.rows.forEach(function (row) {
+					assert.isArray(row, "Expected 'rows' member of 'config' parameter to DataFrame constructor to be an array of arrays, an array of objects or an iterator.");
+				});
+			}
+
+	 		rows = function () {
+				return new SelectIterator(
+					new ArrayIterator(config.rows),
+					function (row) {
+						var resolvedColumnNames = columnNames;
+						if (Object.isFunction(resolvedColumnNames)) {
+							resolvedColumnNames = resolvedColumnNames();
+						}
+						return E.from(resolvedColumnNames)
+							.select(function (columnName, columnIndex) {
+								return [columnName, columnIndex];
+							})
+							.toObject(
+								function (column) {
+									return column[0];
+								},
+								function (column) {
+									return row[column[1]];
+								}
+							);							
+					}
+				);
+	 		};		 		
+		}
+	}
+	else if (config.rows) {
+		if (Object.isFunction(config.rows)) {
+
+			var determineColumnNames = function () {
+				var iterator = config.rows();
+				if (!iterator.moveNext()) {
+					return [];
+				}
+
+				return Object.keys(iterator.getCurrent());
+			};				
+
+			columnNames = determineColumnNames;
+
+			rows = config.rows;
+		}
+		else {
+			assert.isArray(config.rows, "Expected 'rows' member of 'config' parameter to DataFrame constructor to be an array of rows.");
+			
+			if (config.rows.length > 0) {
+				if (Object.isObject(config.rows[0])) {
+
+					if (config.debug) {
+						config.rows.forEach(function (row) {
+							assert.isObject(row, "Expect 'rows' member of 'config' parameter to DataFrame constructor to be array of objects or arrays, do not mix and match arrays and objects in 'rows'.");
+						});							
+					}
+
+					// Derive column names from object fields.
+					columnNames = function () {
+						return E.from(config.rows)
+							.selectMany(function (row) {
+								return Object.keys(row);
+							})
+							.distinct()
+							.toArray();
+					};
+
+					rows = function () {
+						return new ArrayIterator(config.rows);
+					};
+				}
+				else {
+					if (config.debug) {
+						config.rows.forEach(function (row) {
+							assert.isArray(row, "Expect 'rows' member of 'config' parameter to DataFrame constructor to be array of objects or arrays, do not mix and match arrays and objects in 'rows'.");
+						});				
+					}
+
+					// Default column names.
+					columnNames = E.range(0, config.rows[0].length)
+						.select(function (columnIndex) {
+							return columnIndex.toString();
+						})
+						.toArray();
+
+					rows = function () {
+						return new SelectIterator(
+							new ArrayIterator(config.rows),
+							function (row) {
+								return E.range(0, config.rows[0].length)
+									.toObject(
+										function (columnIndex) {
+											return columnIndex.toString();
+										},
+										function (columnIndex) {
+											return row[columnIndex];
+										}
+									);							
+							}
+						);
+					};
+				}
+			}
+		}
+	}
+	
+	if (!rows) {
+		rows = function () {
+			return new ArrayIterator([]);
+		};
+	}
+
+	assert.isFunction(index);
+	assert.isFunction(rows);
+
+	self._columnNames = columnNames || [];
+	self._iterable = function () {
+		return new MultiIterator([index(), rows()]);
+	};
+};
+
+/**
+ * Get the index of the data frame.
+ */
+DataFrame.prototype.getIndex = function () {
+	var self = this;
+	return new Index(function () {		
+		return new SelectIterator(
+			self.getIterator(),
+			function (pair) {
+				return pair[0]; // Extract index.
 			}
 		);
+	});
+};
 
-	return copy;
+/**
+ * Get the names of the columns in the data frame.
+ */
+DataFrame.prototype.getColumnNames = function () {
+	var self = this;
+	if (self._newIterable) {
+		return self._newIterable.getColumnNames();
+	}
+	if (Object.isFunction(self._columnNames)) { //fio:
+		self._columnNames = self._columnNames(); // Lazy evaluate column names.
+	}
+	return self._columnNames;
+};
+
+/**
+ * Get an iterator for the data-frame.
+ */
+DataFrame.prototype.getIterator = function () {
+	var self = this;
+	return self._iterable();
 };
 
 /**
@@ -24438,14 +25204,14 @@ var mapRowByColumns = function (self, row) {
  *
  * @returns {Number} Returns the index of the named column or -1 if the requested column was not found.
  */
-BaseDataFrame.prototype.getColumnIndex = function (columnName) {
+DataFrame.prototype.getColumnIndex = function (columnName) {
 	assert.isString(columnName, "Expected 'columnName' parameter to getColumnIndex to be a non-empty string.");
 	
 	var self = this;	
 	var columnNames = self.getColumnNames();
 	
 	for (var i = 0; i < columnNames.length; ++i) {
-		if (columnName == columnNames[i]) {
+		if (columnName === columnNames[i]) {
 			return i;
 		}
 	}	
@@ -24454,30 +25220,77 @@ BaseDataFrame.prototype.getColumnIndex = function (columnName) {
 };
 
 /**
+ * Gets a column name from a column index.
+ *
+ * @param {int} columnIndex - The index of the column to retrieve the column name for.
+ *
+ * @returns {string} Returns the name of the column or undefined if the requested column was not found.
+ */
+DataFrame.prototype.getColumnName = function (columnIndex) { //todo: test
+	assert.isNumber(columnIndex, "Expected 'columnIndex' parameter to getColumnIndex to be a non-empty string.");
+
+	var self = this;	
+	var columnNames = self.getColumnNames();
+
+	if (columnIndex < 0 || columnIndex >= columnNames.length) {
+		return undefined;
+	}
+
+	return columnNames[columnIndex];
+};
+
+/**
  * Skip a number of rows in the data frame.
  *
  * @param {int} numRows - Number of rows to skip.
  */
-BaseDataFrame.prototype.skip = function (numRows) {
+DataFrame.prototype.skip = function (numRows) {
 	assert.isNumber(numRows, "Expected 'numRows' parameter to 'skip' function to be a number.");
 
-	var LazyDataFrame = require('./lazydataframe'); // Require here to prevent circular ref.
-	
 	var self = this;
-	return new LazyDataFrame(
-		function () {
+	return new DataFrame({
+		columnNames: function () {
 			return self.getColumnNames();
 		},
-		function () {
-			return E
-				.from(self.getValues())
-				.skip(numRows)
-				.toArray();
+		iterable: function () {
+			return new SkipIterator(self.getIterator(), numRows);
 		},
-		function () {
-			return self.getIndex().skip(numRows);
-		}
-	); 	
+	}); 	
+};
+
+/**
+ * Skips rows in the data-frame while a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+DataFrame.prototype.skipWhile = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'skipWhile' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return new DataFrame({
+		columnNames: function () {
+			return self.getColumnNames();
+		},
+		iterable: function () {
+			return new SkipWhileIterator(self.getIterator(), function (pair) {
+					return predicate(pair[1], pair[0]);
+				});
+		},
+	}); 	
+};
+
+/**
+ * Skips rows in the data-frame until a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+DataFrame.prototype.skipUntil = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'skipUntil' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return self.skipWhile(function (value, index) { 
+		return !predicate(value, index); 
+	});
 };
 
 /**
@@ -24485,26 +25298,53 @@ BaseDataFrame.prototype.skip = function (numRows) {
  *
  * @param {int} numRows - Number of rows to take.
  */
-BaseDataFrame.prototype.take = function (numRows) {
+DataFrame.prototype.take = function (numRows) {
 	assert.isNumber(numRows, "Expected 'numRows' parameter to 'take' function to be a number.");
 
-	var LazyDataFrame = require('./lazydataframe'); // Require here to prevent circular ref.
-	
 	var self = this;
-	return new LazyDataFrame(
-		function () {
+	return new DataFrame({
+		columnNames: function () {
 			return self.getColumnNames();
 		},
-		function () {
-			return E
-				.from(self.getValues())
-				.take(numRows)
-				.toArray();
+		iterable: function () {
+			return new TakeIterator(self.getIterator(), numRows);
 		},
-		function () {
-			return self.getIndex().take(numRows);
-		}
-	); 	
+	}); 	
+};
+
+/**
+ * Take rows from the data-frame while a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+DataFrame.prototype.takeWhile = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'takeWhile' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return new DataFrame({
+		columnNames: function () {
+			return self.getColumnNames();
+		},
+		iterable: function () {
+			return new TakeWhileIterator(self.getIterator(), function (pair) {
+					return predicate(pair[1], pair[0]);
+				});
+		},
+	}); 	
+};
+
+/**
+ * Take rows from the data-frame until a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+DataFrame.prototype.takeUntil = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'takeUntil' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return self.takeWhile(function (value, index) { 
+		return !predicate(value, index); 
+	});
 };
 
 /**
@@ -24512,61 +25352,20 @@ BaseDataFrame.prototype.take = function (numRows) {
  *
  * @param {function} filterSelectorPredicate - Predicte function to filter rows of the data frame.
  */
-BaseDataFrame.prototype.where = function (filterSelectorPredicate) {
+DataFrame.prototype.where = function (filterSelectorPredicate) {
 	assert.isFunction(filterSelectorPredicate, "Expected 'filterSelectorPredicate' parameter to 'where' function to be a function.");
 
 	var self = this;
-
-	var cachedFilteredIndexAndValues = null;
-
-	//
-	// Lazy  execute the filtering.
-	//
-	var executeLazyWhere = function () {
-
-		if (cachedFilteredIndexAndValues) {
-			return cachedFilteredIndexAndValues;
-		}
-
-		cachedFilteredIndexAndValues = E
-			.from(self.getIndex().getValues())
-			.zip(self.getValues(), function (index, values) {
-				return [index, values];
-			})
-			.where(function (data) {
-				var row = data[1];
-				return filterSelectorPredicate(mapRowByColumns(self, row));
-			})
-			.toArray();
-		return cachedFilteredIndexAndValues;
-	}
-
-
-	var LazyDataFrame = require('./lazydataframe');
-	return new LazyDataFrame(
-		function () {
+	return new DataFrame({
+		columnNames: function () {
 			return self.getColumnNames();
 		},
-		function () {
-			return E.from(executeLazyWhere())
-				.select(function (data) {
-					return data[1]; // Row
-				})
-				.toArray();
+		iterable: function () {
+			return new WhereIterator(self.getIterator(), function (pair) {
+					return filterSelectorPredicate(pair[1], pair[0]);
+				});
 		},
-		function () {
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					return E.from(executeLazyWhere())
-						.select(function (data) {
-							return data[0]; // Index
-						})
-						.toArray();
-				}
-			);
-		}
-	); 	
+	}); 	
 };
 
 /**
@@ -24574,57 +25373,20 @@ BaseDataFrame.prototype.where = function (filterSelectorPredicate) {
  *
  * @param {function} selector - Selector function that transforms each row to a different data structure.
  */
-BaseDataFrame.prototype.select = function (selector) {
+DataFrame.prototype.select = function (selector) {
 	assert.isFunction(selector, "Expected 'selector' parameter to 'select' function to be a function.");
 
 	var self = this;
-
-	var newValues = null;
-	var newColumnNames = null;
-
-	var lazyEvaluate = function () {
-		if (newValues) {
-			return;
-		}
-
-		newValues = E
-			.from(self.getValues())
-			.select(function (row) {
-				return selector(mapRowByColumns(self, row));
-			})
-			.toArray();
-
-		newColumnNames = E.from(newValues)
-			.selectMany(function (value) {
-				return Object.keys(value);
-			})
-			.distinct()
-			.toArray();
-	};
-
-	var LazyDataFrame = require('./lazydataframe');
-	return new LazyDataFrame(
-		function () {
-			lazyEvaluate();
-			return newColumnNames;
+	return new DataFrame({
+		iterable: function () {
+			return new SelectIterator(self.getIterator(), function (pair) {
+					return [
+						pair[0],
+						selector(pair[1], pair[0]),
+					];
+				});
 		},
-		function () {
-			lazyEvaluate();
-			var newRows = E.from(newValues)
-				.select(function (value) {
-					return E.from(newColumnNames)
-						.select(function (columnName) {
-							return value[columnName];
-						})
-						.toArray();
-				})
-				.toArray();			
-			return newRows;
-		},
-		function () {
-			return self.getIndex();
-		}
-	); 	
+	}); 	
 };
 
 /**
@@ -24632,192 +25394,131 @@ BaseDataFrame.prototype.select = function (selector) {
  *
  * @param {function} selector - Selector function that transforms each row to a different data structure.
  */
-BaseDataFrame.prototype.selectMany = function (selector) {
+DataFrame.prototype.selectMany = function (selector) {
 	assert.isFunction(selector, "Expected 'selector' parameter to 'selectMany' function to be a function.");
 
 	var self = this;
-
-	var newColumnNames = null;
-	var newValues = null;
-	var newRows = null;
-
-	var lazyEvaluate = function () {
-
-		if (newValues) {
-			return;
-		}
-
-		newValues = E.from(self.getIndex().getValues())
-			.zip(self.getValues(), function (index, row) {
-				return [index, selector(mapRowByColumns(self, row))];
-			})
-			.toArray();
-
-		newColumnNames = E.from(newValues)
-			.selectMany(function (data) {
-				var values = data[1];
-				return E.from(values)
-					.selectMany(function (value) {
-						return Object.keys(value);
+	return new DataFrame({
+		iterable: function () {
+			return new SelectManyIterator(self.getIterator(), function (pair) {
+				var newRows = selector(pair[1], pair[0]);
+				return E.from(newRows)
+					.select(function (newRow) {
+						return [
+							pair[0], 
+							newRow,
+						];
 					})
 					.toArray();
 			})
-			.distinct()
-			.toArray();
-
-		newRows = E.from(newValues)
-			.selectMany(function (data) {
-				var values = data[1];
-				return E.from(values)
-					.select(function (value) {
-						return E.from(newColumnNames)
-							.select(function (columnName) {
-								return value[columnName];
-							})
-							.toArray();
-					})
-					.toArray();
-			})
-			.toArray();
-	};
-
-	var LazyDataFrame = require('./lazydataframe');
-	return new LazyDataFrame(
-		function () {
-			lazyEvaluate();
-			return newColumnNames;
 		},
-		function () {
-			lazyEvaluate();
-			return newRows;
-		},
-		function () {
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					lazyEvaluate();
-					var indexValues = E.from(newValues)
-						.selectMany(function (data) {
-							var index = data[0];
-							var values = data[1];
-							return E.range(0, values.length)
-								.select(function (_) {
-									return index;
-								})
-								.toArray();
-						})
-						.toArray();
-					return indexValues;
-				}
-			);
-		}
-	); 	
+	}); 	
 };
 
-/*
- * Retreive a named column from the DataFrame.
+/**
+ * Retreive a time-series from a column of the data-frame.
  *
  * @param {string|int} columnNameOrIndex - Name or index of the column to retreive.
  */
-BaseDataFrame.prototype.getColumn = function (columnNameOrIndex) {
+DataFrame.prototype.getSeries = function (columnNameOrIndex) {
 	var self = this;
 
-	var columnIndex;
-	if (Object.isString(columnNameOrIndex)) {
-		columnIndex = self.getColumnIndex(columnNameOrIndex);
-		if (columnIndex < 0) {
-			throw new Error("In call to 'getColumn' failed to find column '" + columnNameOrIndex + "'.");
-		}
-	}
-	else {	
-		assert.isNumber(columnNameOrIndex, "Expected 'columnNameOrIndex' parameter to 'getColumn' to be either a string or index that specifies the column to retreive.");
+	var columnName = parseColumnNameOrIndexToName(self, columnNameOrIndex, true);
 
-		columnIndex = columnNameOrIndex;
-	}
-	
-	return new LazyColumn(
-		self.getColumnNames()[columnIndex],
-		function () {
-			return E.from(self.getValues())
-				.select(function (entry) {
-					return entry[columnIndex];
-				})
-				.toArray();
+	return new Series({
+		iterable: function () {
+			return new WhereIterator(
+				new SelectIterator(self.getIterator(), function (pair) {
+					return [
+						pair[0],
+						pair[1][columnName],
+					];
+				}),
+				function (pair) {
+					return pair[1] !== undefined;
+				}
+			);
 		},
-		function () {
-			return self.getIndex();
-		}
-	);
+	});
+};
+
+/**
+ * Returns true if the column with the requested name exists in the data frame.
+ *
+ * @param {string} columnName - Name of the column to check.
+ */
+DataFrame.prototype.hasSeries = function (columnName) {
+
+	assert.isString(columnName);
+
+	var self = this;
+	return self.getColumnIndex(columnName) >= 0;
+};
+
+/**
+ * 
+ * Verify the existance of a column and return it.
+ * Throws an exception if the column doesn't exist.
+ *
+ * @param {string|int} columnNameOrIndex - Name or index of the column to retreive.
+ */
+DataFrame.prototype.expectSeries = function (columnNameOrIndex) {
+
+	var self = this;
+	parseColumnNameOrIndexToIndex(self, columnNameOrIndex, true);
+	return self;
 };
 
 /** 
  * Retreive a collection of all columns.
  */
-BaseDataFrame.prototype.getColumns = function () {
+DataFrame.prototype.getColumns = function () {
 
 	var self = this;
 
 	return E.from(self.getColumnNames())
 		.select(function (columnName) {
-			return self.getColumn(columnName);
+			return {
+				name: columnName,
+				series: self.getSeries(columnName),
+			};
 		})
 		.toArray();
 };
 
-//
-// Retreive a subset of the data frame's columns as a new data frame.
-//
-BaseDataFrame.prototype.getColumnsSubset = function (columnNames) {
-	var LazyDataFrame = require('./lazydataframe'); // Local require to prevent circular ref.
+/**
+ * Create a new data-frame from a subset of columns.
+ *
+ * @param {array} columnNames - Array of column names to include in the new data-frame.
+ */
+DataFrame.prototype.subset = function (columnNames) {
 
 	var self = this;
 	
-	assert.isArray(columnNames, "Expected 'columnName' parameter to 'subset' to be an array.");	
+	assert.isArray(columnNames, "Expected 'columnNames' parameter to 'subset' to be an array.");	
 	
-	return new LazyDataFrame(
-		function () {
-			return columnNames; 
+	return new DataFrame({
+		columnNames: columnNames,
+		iterable: function () {
+			return new SelectIterator(
+				self.getIterator(),
+				function (pair) {
+					return [
+						pair[0],
+						E.from(columnNames)
+							.toObject(
+								function (columnName) {
+									return columnName;
+								},
+								function (columnName) {
+									return pair[1][columnName];
+								}
+							)
+					];					
+				}
+			);
 		},
-		function () {
-			var columnIndices = E.from(columnNames)
-				.select(function (columnName) {
-					return self.getColumnIndex(columnName);
-				})
-				.toArray();
-			
-			return E.from(self.getValues())
-				.select(function (entry) {
-					return E.from(columnIndices)
-						.select(function (columnIndex) {
-							return entry[columnIndex];					
-						})
-						.toArray();
-				})
-				.toArray();
-		},
-		function () {
-			return self.getIndex();
-		}
-	);	 
-};
-
-//
-// Save the data frame via plugable output.
-//
-BaseDataFrame.prototype.as = function (formatPlugin) {
-	assert.isObject(formatPlugin, "Expected 'formatPlugin' parameter to 'DataFrame.as' to be an object.");
-	assert.isFunction(formatPlugin.to, "Expected 'formatPlugin' parameter to 'DataFrame.as' to be an object with a 'to' function.");
-
-	var self = this;	
-	return {
-		to: function (dataSourcePlugin) {
-			assert.isObject(dataSourcePlugin, "Expected 'dataSourcePlugin' parameter to 'DataFrame.as.to' to be an object.");
-			assert.isFunction(dataSourcePlugin.write, "Expected 'dataSourcePlugin' parameter to 'DataFrame.as.to' to be an object with a 'write' function.");
-			
-			var textData = formatPlugin.to(self);
-			return dataSourcePlugin.write(textData);
-		},		
-	};
+	});	 
 };
 
 //
@@ -24843,15 +25544,12 @@ var executeOrderBy = function (self, batch) {
 	assert.isArray(batch);
 	assert(batch.length > 0);
 
-	var cachedSorted = null;
+	//todo: reconsider how this works wih lazy iterators.
 
 	//
 	// Don't invoke the sort until we really know what we need.
 	//
 	var executeLazySort = function () {
-		if (cachedSorted) {
-			return cachedSorted;
-		}
 
 		batch.forEach(function (orderCmd) {
 			assert.isObject(orderCmd);
@@ -24859,51 +25557,27 @@ var executeOrderBy = function (self, batch) {
 			validateSortMethod(orderCmd.sortMethod);
 		});
 
-		var valuesWithIndex = E.from(self.getIndex().getValues())
-			.zip(self.getValues(), function (index, values) {
-				return [index].concat(values);
-			})
-			.toArray();	
+		var pairs = self.getIterator().realize();
 
-		cachedSorted = E.from(batch)
-			.aggregate(E.from(valuesWithIndex), function (unsorted, orderCmd) {
-				return unsorted[orderCmd.sortMethod](function (row) {
-					var columnMappedRow = mapRowByColumns(self, E.from(row).skip(1).toArray()); // Skip the generated index column.
-					return orderCmd.sortSelector(columnMappedRow);
+		return E.from(batch)
+			.aggregate(E.from(pairs), function (unsorted, orderCmd) {
+				return unsorted[orderCmd.sortMethod](function (pair) {
+					assert.isArray(pair);
+					assert(pair.length === 2);
+					return orderCmd.sortSelector(pair[1]);
 				}); 
 			})
 			.toArray();
-
-		return cachedSorted;
 	};
 
-	var LazyDataFrame = require('./lazydataframe');
-
-	return new LazyDataFrame(
-		function () {
+	return new DataFrame({
+		columnNames: function () {
 			return self.getColumnNames();
 		},
-		function () {
-			return E.from(executeLazySort())
-				.select(function (row) {
-					return E.from(row).skip(1).toArray(); // Extract the values (minus the index) from the sorted data.					
-				})
-				.toArray();
+		iterable: function () {
+			return new ArrayIterator(executeLazySort());
 		},
-		function () {
-			var LazyIndex = require('./lazyindex');
-			return new LazyIndex(
-				self.getIndex().getName(),
-				function () {
-					return E.from(executeLazySort())
-						.select(function (row) {
-							return row[0]; // Extract the index from the sorted data.
-						})
-						.toArray();
-				}
-			);
-		}
-	);
+	});
 };
 
 //
@@ -24996,7 +25670,7 @@ var orderThenBy = function (self, batch, nextSortMethod) {
  * 
  * @param {string|index|function} columnNameOrIndexOrSelector - A column name, column index or selector function that indicates the value to sort by.
  */
-BaseDataFrame.prototype.orderBy = function (columnNameOrIndexOrSelector) {
+DataFrame.prototype.orderBy = function (columnNameOrIndexOrSelector) {
 
 	var self = this;
 	return orderBy(self, 'orderBy', processColumnSelector(self, columnNameOrIndexOrSelector, 'orderBy'));
@@ -25007,7 +25681,7 @@ BaseDataFrame.prototype.orderBy = function (columnNameOrIndexOrSelector) {
  * 
  * @param {string|index|function} columnNameOrIndexOrSelector - A column name, column index or selector function that indicates the value to sort by.
  */
-BaseDataFrame.prototype.orderByDescending = function (columnNameOrIndexOrSelector) {
+DataFrame.prototype.orderByDescending = function (columnNameOrIndexOrSelector) {
 
 	var self = this;
 	return orderBy(self, 'orderByDescending', processColumnSelector(self, columnNameOrIndexOrSelector, 'orderByDescending'));
@@ -25018,173 +25692,182 @@ BaseDataFrame.prototype.orderByDescending = function (columnNameOrIndexOrSelecto
  *
  * @param {string|array} columnOrColumns - Specifies the column name (a string) or columns (array of column names) to drop.
  */
-BaseDataFrame.prototype.dropColumn = function (columnOrColumns) {
+DataFrame.prototype.dropColumn = function (columnOrColumns) {
+
+	var self = this;
+
 	if (!Object.isArray(columnOrColumns)) {
 		assert.isString(columnOrColumns, "'dropColumn' expected either a string or an array or strings.");
 
 		columnOrColumns = [columnOrColumns]; // Convert to array for coding convenience.
 	}
 
-	var self = this;
-
-	var cachedColumnIndices = null;
-
-	var lazyGenerateColumnIndices = function () {
-
-		if (cachedColumnIndices) {
-			return cachedColumnIndices;
-		}
-
-		cachedColumnIndices = E.from(columnOrColumns)
-			.select(function (columnName)  {
-				assert.isString(columnName);
-				var columnIndex = self.getColumnIndex(columnName);
-				if (columnIndex < 0) {
-					throw new Error("In call to 'dropColumn' failed to find column '" + columnName + "'.");
+	return new DataFrame({
+		columnNames: function () {
+			var columnNames = self.getColumnNames().slice(0); // Clone array.
+			return E.from(columnNames)
+				.where(function (columnName) {
+					return !E.from(columnOrColumns).contains(columnName);
+				})
+				.toArray();
+		},
+		iterable: function () {
+			return new SelectIterator(
+				self.getIterator(),
+				function (pair) {
+					var row = extend({}, pair[1]);
+					columnOrColumns.forEach(function (columnName) {
+						delete row[columnName];
+					});
+					return [
+						pair[0],
+						row
+					];					
 				}
-				return columnIndex;
-			})
-			.toArray();
-		return cachedColumnIndices;
-	};
-
-
-	var LazyDataFrame = require('./lazydataframe');
-
-	return new LazyDataFrame(
-		function () {
-			var columnIndices = lazyGenerateColumnIndices();
-			return E.from(self.getColumnNames())
-				.where(function (columnName, columnIndex) {
-					return columnIndices.indexOf(columnIndex) < 0;
-				})
-				.toArray();
+			);
 		},
-		function () {
-			var columnIndices = lazyGenerateColumnIndices();
-			return E.from(self.getValues())
-				.select(function (row) {
-					return E.from(row)
-						.where(function (column, columnIndex) {
-							return columnIndices.indexOf(columnIndex) < 0;
-						})
-						.toArray();
-				})
-				.toArray();
-		},
-		function () {
-			return self.getIndex();
-		}
-	);
+	});
 };
 
 /**
- * Create a new data frame with and additional or replaced column.
+ * Create a new data frame with an additional column specified by the passed-in series.
  *
  * @param {string} columnName - The name of the column to add or replace.
  * @param {array|column} data - Array of data or column that contains data.
  */
-BaseDataFrame.prototype.setColumn = function (columnName, data) {
-	assert.isString(columnName, "Expected 'columnName' parameter to 'setColumn' to be a string.");
+DataFrame.prototype.setSeries = function (columnName, data) { //todo: should allow column name or index.
+	assert.isString(columnName, "Expected 'columnName' parameter to 'setSeries' to be a string.");
 
 	var self = this;
 
-	if (!Object.isArray(data)) {
-		assert.isObject(data, "Expected 'data' parameter to 'setColumn' to be either an array or a column object.");
-		assert.isFunction(data.reindex, "Expected 'data' parameter to 'setColumn' to have a 'reindex' function that allows the column to be reindexed.");
+	if (Object.isFunction(data)) {
+		data = E.from(self.toPairs()) //todo: make this lazy
+			.select(function (pair) {
+				return data(pair[1], pair[0]);
+			})
+			.toArray();
+	}
+	else if (!Object.isArray(data)) {
+		assert.isObject(data, "Expected 'data' parameter to 'setSeries' to be either an array or a series object.");
+		assert.isFunction(data.reindex, "Expected 'data' parameter to 'setSeries' to have a 'reindex' function that allows the column to be reindexed.");
 
-		data = data.reindex(self.getIndex()).getValues();
+		data = data.reindex(self.getIndex()).toValues();
 	}
 
-	var LazyDataFrame = require('./lazydataframe');
+	//todo: overview and improve the way this works.
 
 	var columnIndex = self.getColumnIndex(columnName);
-	if (columnIndex < 0) {
-		
+	if (columnIndex < 0) {		
 		// Add new column.
-		return new LazyDataFrame(
-			function () {
-				return self.getColumnNames().concat([columnName]);
+		return new DataFrame({
+			columnNames: self.getColumnNames().concat([columnName]),
+			rows: function () {
+				return new ArrayIterator(
+					E.from(self.toValues())
+						.select(function (row, rowIndex) {
+							return row.concat([data[rowIndex]]);
+						})
+						.toArray()
+				);
 			},
-			function () {
-				return E.from(self.getValues())
-					.select(function (row, rowIndex) {
-						return row.concat([data[rowIndex]]);
-					})
-					.toArray();
-			},
-			function () {
-				return self.getIndex();
-			}
-		);
+			index: self.getIndex(),
+		});
 	}
 	else {
-
 		// Replace existing column.
-		return new LazyDataFrame(
-			function () {
-				return E.from(self.getColumnNames())
-					.select(function (thisColumnName, thisColumnIndex) {
-						if (thisColumnIndex === columnIndex) {
-							return columnName;
-						}
-						else { 
-							return thisColumnName;
-						}
-					})
-					.toArray();
+		return new DataFrame({
+			columnNames: E.from(self.getColumnNames())
+				.select(function (thisColumnName, thisColumnIndex) {
+					if (thisColumnIndex === columnIndex) {
+						return columnName;
+					}
+					else { 
+						return thisColumnName;
+					}
+				})
+				.toArray(),
+			rows: function () {
+				return new ArrayIterator(
+					E.from(self.toValues())
+						.select(function (row, rowIndex) {
+							return E.from(row)
+								.select(function (column, thisColumnIndex) {
+									if (thisColumnIndex === columnIndex) {
+										return data[rowIndex];
+									}
+									else {
+										return column;
+									}
+								})
+								.toArray();
+						})
+						.toArray()
+				);
 			},
-			function () {
-				return E.from(self.getValues())
-					.select(function (row, rowIndex) {
-						return E.from(row)
-							.select(function (column, thisColumnIndex) {
-								if (thisColumnIndex === columnIndex) {
-									return data[rowIndex];
-								}
-								else {
-									return column;
-								}
-							})
-							.toArray();
-					})
-					.toArray();
-			},
-			function () {
-				return self.getIndex();
-			}
-		);
+			index: self.getIndex(),
+		});
 	}
 };
 
 /**
- * Get a subset of rows from the data frame.
+ * Create a new data-frame from a slice of rows.
  *
- * @param {int} index - Index where the subset starts.
- * @param {int} count - Number of rows to include in the subset.
+ * @param {int|function} startIndexOrStartPredicate - Index where the slice starts or a predicate function that determines where the slice starts.
+ * @param {int|function} endIndexOrEndPredicate - Marks the end of the slice, one row past the last row to include. Or a predicate function that determines when the slice has ended.
+ * @param {function} [predicate] - Optional predicate to compare index against start/end index. Return true to start or stop the slice.
  */
-BaseDataFrame.prototype.getRowsSubset = function (index, count) {
-	assert.isNumber(index, "Expected 'index' parameter to getRowsSubset to be an integer.");
-	assert.isNumber(index, "Expected 'count' parameter to getRowsSubset to be an integer.");
+DataFrame.prototype.slice = function (startIndexOrStartPredicate, endIndexOrEndPredicate, predicate) {
 
 	var self = this;
 
-	var LazyDataFrame = require('./lazydataframe'); // Require here to prevent circular ref.
+	var startIndex;
+	var endIndex;
+	var startPredicate = null;
+	var endPredicate = null;
 
-	return new LazyDataFrame(
-		function () {
-			return self.columnNames();
+	if (predicate) {
+		assert.isFunction(predicate, "Expected 'predicate' parameter to slice function to be function.");
+	}
+
+	if (Object.isFunction(startIndexOrStartPredicate)) {
+		startPredicate = startIndexOrStartPredicate;
+	}
+	else {
+		startIndex = startIndexOrStartPredicate;
+		startPredicate = function (value) {
+				return predicate && predicate(value, startIndex) || value < startIndex;
+			};
+	}
+
+	if (Object.isFunction(endIndexOrEndPredicate)) {
+		endPredicate = endIndexOrEndPredicate;
+	}
+	else {
+		endIndex = endIndexOrEndPredicate;
+		endPredicate = function (value) {
+				return predicate && predicate(value, endIndex) || value < endIndex;
+			};
+	}
+
+	return new DataFrame({
+		columnNames: function () {
+			return self.getColumnNames();
 		},
-		function () {
-			return E.from(self.getValues())
-				.skip(index)
-				.take(count)
-				.toArray();
-		},
-		function () {
-			return self.getIndex().getRowsSubset(index, count);
-		}
-	);
+		iterable: function () {
+			return new TakeWhileIterator(
+				new SkipWhileIterator(
+					self.getIterator(),
+					function (pair) {
+						return startPredicate(pair[0]); // Check index for start condition.
+					}
+				),
+				function (pair) {
+					return endPredicate(pair[0]); // Check index for end condition.
+				}
+			);
+		},		
+	});
+
 };
 
 /**
@@ -25192,69 +25875,2352 @@ BaseDataFrame.prototype.getRowsSubset = function (index, count) {
  *
  * @param {string|int} columnNameOrIndex - Name or index of the column to set as the index.
  */
-BaseDataFrame.prototype.setIndex = function (columnNameOrIndex) {
+DataFrame.prototype.setIndex = function (columnNameOrIndex) {
 
 	var self = this;
-
-	var LazyDataFrame = require('./lazydataframe'); // Require here to prevent circular ref.
-
-	return new LazyDataFrame(
-		function () {
+	return new DataFrame({
+		columnNames: function () {
 			return self.getColumnNames();
 		},
-		function () {
-			return self.getValues();
+		iterable: function () {
+			return new MultiIterator([
+				new SelectIterator(
+					self.getSeries(columnNameOrIndex).getIterator(),
+					function (pair) {
+						return pair[1];
+					}
+				),				
+				new SelectIterator(
+					self.getIterator(),
+					function (pair) {
+						return pair[1];
+					}
+				),
+			]);
 		},
-		function () {
-			return new LazyIndex(
-				self.getColumn(columnNameOrIndex).getName(),
-				function () {
-					return self.getColumn(columnNameOrIndex).getValues();
-				}
-			);
-		}		
-	);
-}
+	});
+};
 
 /**
  * Reset the index of the data frame back to the default sequential integer index.
  */
-BaseDataFrame.prototype.resetIndex = function () {
+DataFrame.prototype.resetIndex = function () {
 
 	var self = this;
-	var LazyDataFrame = require('./lazydataframe'); // Require here to prevent circular ref.
-
-	return new LazyDataFrame(
-		function () {
+	return new DataFrame({
+		columnNames: function () {
 			return self.getColumnNames();
 		},
-		function () {
-			return self.getValues();
-		},
-		function () {
-			return new LazyIndex(
-				"__index___",
-				function () {
-					return E.range(0, self.getValues().length).toArray();
+		iterable: function () {
+			return new SelectIterator(
+				self.getIterator(),
+				function (pair, i) {
+					return [i, pair[1]];
 				}
 			);
-		}		
-	);
+		},
+	});
 };
 
 /** 
  * Format the data frame for display as a string.
  */
-BaseDataFrame.prototype.toString = function () {
+DataFrame.prototype.toString = function () {
 
 	var self = this;
 	var Table = require('easy-table');
 
-	var index = self.getIndex().getValues();
-	var header = [self.getIndex().getName()].concat(self.getColumnNames());
-	var rows = E.from(self.getValues())
-			.select(function (row, rowIndex) { 
-				return [index[rowIndex]].concat(row);
+	var index = self.getIndex().toValues();
+	var header = ["__index__"].concat(self.getColumnNames());
+	var rows = E.from(self.toValues())
+		.select(function (row, rowIndex) { 
+			return [index[rowIndex]].concat(row);
+		})
+		.toArray()
+
+	var t = new Table();
+	rows.forEach(function (row, rowIndex) {
+		row.forEach(function (cell, cellIndex) {
+			t.cell(header[cellIndex], cell);
+		});
+		t.newRow();
+	});
+
+	return t.toString();
+};
+
+/**
+ * Parse a column with string values to a column with int values.
+ *
+ * @param {string|int} columnNameOrIndex - Specifies the column to parse.
+ */
+DataFrame.prototype.parseInts = function (columnNameOrIndex) {
+
+	var self = this;
+	return self.setSeries(columnNameOrIndex, self.getSeries(columnNameOrIndex).parseInts());
+};
+
+/**
+ * Parse a column with string values to a column with float values.
+ *
+ * @param {string|int} columnNameOrIndex - Specifies the column to parse.
+ */
+DataFrame.prototype.parseFloats = function (columnNameOrIndex) {
+
+	var self = this;
+	return self.setSeries(columnNameOrIndex, self.getSeries(columnNameOrIndex).parseFloats());
+};
+
+/**
+ * Parse a column with string values to a column with date values.
+ *
+ * @param {string|int} columnNameOrIndex - Specifies the column to parse.
+ * @param {string} [formatString] - Optional formatting string for dates.
+ */
+DataFrame.prototype.parseDates = function (columnNameOrIndex, formatString) {
+
+	if (formatString) {
+		assert.isString(formatString, "Expected optional 'formatString' parameter to parseDates to be a string (if specified).");
+	}
+
+	var self = this;
+	return self.setSeries(columnNameOrIndex, self.getSeries(columnNameOrIndex).parseDates(formatString));
+};
+
+/**
+ * Convert a column of values of different types to a column of string values.
+ *
+ * @param {string|int} columnNameOrIndex - Specifies the column to convert.
+ * @param {string} [formatString] - Optional formatting string for dates.
+ */
+DataFrame.prototype.toStrings = function (columnNameOrIndex, formatString) {
+
+	if (formatString) {
+		assert.isString(formatString, "Expected optional 'formatString' parameter to parseDates to be a string (if specified).");
+	}
+
+	var self = this;
+	return self.setSeries(columnNameOrIndex, self.getSeries(columnNameOrIndex).toStrings(formatString));
+};
+
+/**
+ * Detect actual types and their frequencies contained within columns in the data frame.
+ */
+DataFrame.prototype.detectTypes = function () {
+
+	var self = this;
+
+	var dataFrames = E.from(self.getColumns())
+		.select(function (column) {
+			var series = column.series;
+			var numValues = series.toValues().length;
+			//todo: broad-cast column
+			var newSeries = new Series({
+				values: E.range(0, numValues)
+					.select(function () { 
+						return column.name; 
+					})
+					.toArray()
+			});
+			return column.series
+				.detectTypes()
+				.setSeries('Column', newSeries);
+		})
+		.toArray();
+	var dataForge = require('../index');
+	return dataForge.concat(dataFrames).resetIndex();
+};
+
+/**
+ * Detect values and their frequencies contained within columns in the data frame.
+ */
+DataFrame.prototype.detectValues = function () {
+
+	var self = this;
+
+	var dataFrames = E.from(self.getColumns())
+		.select(function (column) {
+			var numValues = column.series.toValues().length;
+			//todo: broad-cast column
+			var newSeries = new Series({
+				values: E.range(0, numValues)
+					.select(function () { 
+						return column.name 
+					})
+					.toArray()
+			});
+			return column.series.detectValues().setSeries('Column', newSeries);
+		})
+		.toArray();
+	var dataForge = require('../index');
+	return dataForge.concat(dataFrames).resetIndex();
+};
+/**
+ * Produces a new data frame with all string values truncated to the requested maximum length.
+ *
+ * @param {int} maxLength - The maximum length of the string values after truncation.
+ */
+DataFrame.prototype.truncateStrings = function (maxLength) {
+	assert.isNumber(maxLength, "Expected 'maxLength' parameter to 'truncateStrings' to be an integer.");
+
+	var self = this;
+	var truncatedValues = E.from(self.toValues()) //todo: make this function lazy.
+		.select(function (row) {
+			return E.from(row)
+				.select(function (value) {
+					if (Object.isString(value)) {
+						if (value.length > maxLength) {
+							return value.substring(0, maxLength);
+						}
+					}
+
+					return value;
+				})
+				.toArray();
+		})
+		.toArray();
+
+	return new DataFrame({
+			columnNames: function () {
+				return self.getColumnNames();
+			},
+			rows: truncatedValues,
+		});
+};
+
+/**
+ * Create a new data frame with columns reordered.
+ * New column names create new columns (with undefined values), omitting existing column names causes those columns to be dropped.
+ * 
+ * @param {array} columnNames - The new order for columns. 
+ */
+DataFrame.prototype.remapColumns = function (columnNames) {
+
+	assert.isArray(columnNames, "Expected parameter 'columnNames' to remapColumns to be an array with column names.");
+
+	columnNames.forEach(function (columnName) {
+		assert.isString(columnName, "Expected parameter 'columnNames' to remapColumns to be an array with column names.");
+	});
+
+	var self = this;
+
+	return new DataFrame({
+		columnNames: columnNames,
+		rows: function () { //todo: make this properly lazy.
+			return new ArrayIterator(
+				E.from(self.toValues())
+					.select(function (row) {
+						return E.from(columnNames)
+							.select(function (columnName) {
+								var columnIndex = self.getColumnIndex(columnName);
+								if (columnIndex >= 0) {
+									return row[columnIndex];
+								}
+								else { 
+									// Column doesn't exist.
+									return undefined;
+								}
+							})
+							.toArray();
+					})
+					.toArray()
+			);
+		},
+	});
+};
+
+/**
+ * Create a new data frame with different column names.
+ *
+ * @param {array} newColumnNames - Array of strings, with an element for each existing column that specifies the new name of that column.
+ */
+DataFrame.prototype.renameColumns = function (newColumnNames) {
+
+	var self = this;
+
+	var existingColumns = self.getColumnNames();
+	var numExistingColumns = existingColumns.length;
+
+	assert.isArray(newColumnNames, "Expected parameter 'newColumnNames' to renameColumns to be an array with column names.");
+	assert(newColumnNames.length === numExistingColumns, "Expected 'newColumnNames' array to have an element for each existing column. There are " + numExistingColumns + "existing columns.");
+
+	return new DataFrame({
+		columnNames: newColumnNames,
+		iterable: function () {
+			var columnMap = E.from(existingColumns)
+				.zip(newColumnNames, function (oldName, newName) {
+					return [oldName, newName];
+				})
+				.toArray();
+
+			return new SelectIterator(
+				self.getIterator(),
+				function (pair) {
+					return [
+						pair[0],
+						E.from(columnMap).toObject(
+							function (remap) {
+								return remap[1];
+							},
+							function (remap) {
+								return pair[1][remap[0]];								
+							}
+						)
+					];
+				}
+			);
+		},
+	});
+};
+
+/*
+ * Create a new data frame with a single column renamed.
+ * 
+ * @param {string|int} columnNameOrIndex - Specifies the column to rename.
+ * @param {string} newColumnName - The new name for the specified column.
+ */
+DataFrame.prototype.renameColumn = function (columnNameOrIndex, newColumnName) {
+
+	var self = this;
+	var columnIndex = parseColumnNameOrIndexToIndex(self, columnNameOrIndex, false);
+	if (columnIndex === -1) {
+		return self;
+	}
+
+	assert.isString(newColumnName, "Expected 'newColumnName' parameter to 'renameColumn' to be a string.");
+
+	var newColumnNames = self.getColumnNames().slice(0); // Clone array.
+	newColumnNames[columnIndex] = newColumnName;
+
+	return self.renameColumns(newColumnNames);
+};
+
+/**
+ * Bake the data frame to an array of rows.
+ */
+DataFrame.prototype.toValues = function () {
+
+	var self = this;
+
+	var iterator = self.getIterator();
+	validateIterator(iterator);
+
+	var values = [];
+	var columnNames = self.getColumnNames();
+
+	while (iterator.moveNext()) {
+		var curRow = iterator.getCurrent()[1];
+		var asArray = E.from(columnNames)
+			.select(function (columnName) {
+				return curRow[columnName];
+			})
+			.toArray();
+		values.push(asArray);
+	}
+
+	return values;
+};
+
+/**
+ * Bake the data frame to an array of JavaScript objects.
+ */
+DataFrame.prototype.toObjects = function () {
+
+	var self = this;
+
+	var iterator = self.getIterator();
+	validateIterator(iterator);
+
+	var objects = [];
+
+	while (iterator.moveNext()) {
+		objects.push(iterator.getCurrent()[1]); // Extract values.
+	}
+
+	return objects;
+};
+
+/**
+ * Serialize the data frame to JSON.
+ */
+DataFrame.prototype.toJSON = function () {
+	var self = this;
+	return JSON.stringify(self.toObjects(), null, 4);
+};
+
+/**
+ * Serialize the data frame to CSV.
+ */
+DataFrame.prototype.toCSV = function () {
+
+	var self = this;
+	var data = [self.getColumnNames()].concat(self.toValues());
+	return BabyParse.unparse(data);
+
+	/*Old csv stringify.
+	var header = self.getColumnNames().join(',');
+	var rows = E.from(self.toValues())
+			.select(function (row) {
+				return row.join(',');
+			})
+			.select(function (col) { // Strip newlines... these don't work in CSV files.
+				if (Object.isString(col)) { //todo: not necessar if all columns are converted to strings.
+					return col.replace(/\r\n/g, ' ').replace(/\n/g, ' ');
+				}
+				else {
+					return col;
+				}
+			})					
+			.toArray();
+	return [header].concat(rows).join('\r\n');	
+	*/
+};
+
+/**
+ * Retreive the data as pairs of [index, objects].
+ */
+DataFrame.prototype.toPairs = function () {
+
+	var self = this;
+
+	var iterator = self.getIterator();
+	validateIterator(iterator);
+
+	var pairs = [];
+
+	while (iterator.moveNext()) {
+		pairs.push(iterator.getCurrent());
+	}
+
+	return pairs;
+};
+
+/**
+ * Forces lazy evaluation to complete and 'bakes' the data frame into memory.
+ */
+DataFrame.prototype.bake = function () {
+
+	var self = this;
+	return new DataFrame({
+			columnNames: self.getColumnNames(),
+			rows: self.toValues(),
+			index: self.getIndex().bake(),
+		});
+};
+
+/**
+ * Count the number of rows in the data frame.
+ */
+DataFrame.prototype.count = function () {
+
+	var self = this;
+
+	var total = 0;
+
+	var iterator = self.getIterator();
+
+	while (iterator.moveNext()) {
+		++total;
+	}
+
+	return total;
+};
+
+/**
+ * Transform a column. This is equivalent to extracting a column, calling 'select' on it,
+ * then plugging it back in as the same column.
+ *
+ * @param {string} columnName - Name of the column to transform.
+ * @param {function} selector - Selector function that transforms each row to a different data structure.
+ * 
+ */
+DataFrame.prototype.transformColumn = function (columnNameOrColumnNames, selector) { //todo: this should support 'column name or index'.
+
+	var self = this; //todo: make this lazy.
+
+	if (Object.isObject(columnNameOrColumnNames)) {
+		var columnNames = Object.keys(columnNameOrColumnNames)
+		return E.from(columnNames)
+			.aggregate(self, function (prevDataFrame, columnName) {
+				var columnSelector = columnNameOrColumnNames[columnName];
+				return prevDataFrame.transformColumn(columnName, columnSelector);
+			});
+	}
+	else {
+		assert.isString(columnNameOrColumnNames, "Expected 'columnNameOrColumnNames' parameter to 'transformColumn' to be a string or object.");
+		assert.isFunction(selector, "Expected 'selector' parameter to 'transformColumn' to be a function.");
+
+		var columnName = columnNameOrColumnNames;
+		if (!self.hasSeries(columnName)) {
+			return self;
+		}
+
+		var transformedSeries = self.getSeries(columnName).select(selector);
+		return self.setSeries(columnName, transformedSeries);
+	}
+};
+
+/**
+ * Move a window over the data-frame (batch by batch), invoke a selector for each window that builds a new series.
+ *
+ * @param {integer} period - The number of rows in the window.
+ * @param {function} selector - The selector function invoked per row that builds the output series.
+ *
+ * The selector has the following parameters: 
+ *
+ *		window - Data-frame that represents the rolling window.
+ *		windowIndex - The 0-based index of the window.
+ */
+DataFrame.prototype.window = function (period, selector) {
+
+	assert.isNumber(period, "Expected 'period' parameter to 'window' to be a number.");
+	assert.isFunction(selector, "Expected 'selector' parameter to 'window' to be a function.");
+
+	var self = this;
+
+	//todo: make this properly lazy
+
+	var index = self.getIndex().toValues();
+	var values = self.toValues();
+
+	if (values.length == 0) {
+		return new Series();
+	}
+
+	var numWindows = Math.ceil(values.length/period);
+	if (numWindows == 0) {
+		return new Series();
+	}
+	
+	//todo: make this properly lazy
+
+	var newIndexAndValues = E.range(0, numWindows)
+		.select(function (windowIndex) {
+			var _window = new DataFrame({
+				iterable: function () {
+					return new TakeIterator(
+						new SkipIterator(
+							self.getIterator(), 
+							windowIndex*period
+						), 
+						period
+					);
+				},
+			});
+			var selectorOutput = selector(_window, windowIndex);
+			assert.isArray(selectorOutput, "Expected output from 'window' selector to be an array.");
+			assert(selectorOutput.length === 2, "Expected output from 'window' selector to be an array with 2 elements: index and value.");
+			return selectorOutput;
+		})
+		.toArray();
+
+	return new Series({
+		iterable: function () {
+			return new ArrayIterator(newIndexAndValues);
+		},
+	});
+};
+
+/** 
+ * Move a window over the data-frame (row by row), invoke a selector for each window that builds a new series.
+ *
+ * @param {integer} period - The number of rows in the window.
+ * @param {function} selector - The selector function invoked per row that builds the output series.
+ *
+ * The selector has the following parameters: 
+ *
+ *		window - Data-frame that represents the rolling window.
+ *		windowIndex - The 0-based index of the window.
+ */
+DataFrame.prototype.rollingWindow = function (period, selector) {
+
+	assert.isNumber(period, "Expected 'period' parameter to 'rollingWindow' to be a number.");
+	assert.isFunction(selector, "Expected 'selector' parameter to 'rollingWindow' to be a function.");
+
+	var self = this;
+
+	//todo: make this properly lazy
+
+	var index = self.getIndex().toValues();
+	var values = self.toObjects();
+
+	if (values.length == 0) {
+		return new Series();
+	}
+
+	var newIndexAndValues = E.range(0, values.length-period+1)
+		.select(function (windowIndex) {
+			var _window = new DataFrame({
+					iterable: function () {
+						return new TakeIterator(
+							new SkipIterator(
+								self.getIterator(), 
+								windowIndex
+							), 
+							period
+						);
+					},
+				});
+			return selector(_window, windowIndex);			
+		})
+		.toArray();
+
+	return new Series({
+		iterable: function () {
+			return new ArrayIterator(newIndexAndValues);
+		},
+	});
+};
+
+/**
+ * Get the first row of the data frame.
+ */
+DataFrame.prototype.first = function () {
+
+	var self = this;
+
+	var iterator = self.getIterator();
+
+	if (!iterator.moveNext()) {
+		throw new Error("No rows in data-frame.");
+	}
+
+	return iterator.getCurrent()[1];
+};
+
+/**
+ * Get the last row of the data frame.
+ */
+DataFrame.prototype.last = function () {
+
+	var self = this;
+
+	var iterator = self.getIterator();
+
+	if (!iterator.moveNext()) {
+		throw new Error("No rows in data-frame.");
+	}
+
+	var last = iterator.getCurrent();
+
+	while (iterator.moveNext()) {
+		last = iterator.getCurrent();
+	}
+
+	return last[1];
+};
+
+/** 
+ * Reverse the data-frame.
+ */
+DataFrame.prototype.reverse = function () {
+
+	var self = this;
+	return new DataFrame({
+		columnNames: function () {
+			return self.getColumnNames();
+		},
+		iterable: function () {
+			return new ArrayIterator(
+				E.from(self.getIterator().realize())
+					.reverse()
+					.toArray()
+			);
+		},
+	});
+};
+
+/** 
+ * Generate new columns based on existing rows.
+ *
+ * @param {function} selector - Selector function that transforms each row to a new set of columns.
+ */
+DataFrame.prototype.generateColumns = function (selector) {
+
+	assert.isFunction(selector, "Expected 'selector' parameter to 'generateColumns' function to be a function.");
+
+	var self = this;
+
+	//todo: make this lazy.
+	//todo: this should merge on index.
+	//todo: need to be able to override columns on 1 data frame with columns from another.
+
+	var newColumns = self.select(selector);
+
+	return E.from(newColumns.getColumnNames())
+		.aggregate(self, function (prevDataFrame, newColumnName) {
+			return prevDataFrame.setSeries(newColumnName, newColumns.getSeries(newColumnName));
+		});
+};
+
+/** 
+ * Deflate a data-frame to a series.
+ *
+ * @param {function} selector - Selector function that transforms each row to a new sequence of values.
+ */
+DataFrame.prototype.deflate = function (selector) {
+
+	assert.isFunction(selector, "Expected 'selector' parameter to 'deflate' function to be a function.");
+
+	var self = this;
+
+	return new Series({ 
+			iterable: function () {
+				return new SelectIterator(
+					self.getIterator(),
+					function (pair) {
+						var newValue = selector(pair[1], pair[0]);
+						return [
+							pair[0],
+							newValue
+						];
+					}
+				);
+			},
+		});
+};
+
+/** 
+ * Inflate a named column in the data-frame to 1 or more new columns.
+ *
+ * @param {string|int} columnNameOrIndex - Name or index of the column to retreive.
+ * @param {function} [selector] - Selector function that transforms each value in the column to new columns.
+ */
+DataFrame.prototype.inflateColumn = function (columnNameOrIndex, selector) {
+
+	var self = this;
+	var dataForge = require('../index');
+
+	return self.zip(  //todo: this shoudn't purge the index.
+		self.getSeries(columnNameOrIndex).inflate(selector),
+		function (row1, row2) {
+			return extend({}, row1, row2); //todo: this be should zip's default operation.
+		}
+	);
+};
+
+/** 
+ * Get X rows from the head of the data frame.
+ *
+ * @param {int} numRows - Number of rows to take.
+ */
+DataFrame.prototype.head = function (numRows) {
+
+	assert.isNumber(numRows, "Expected 'numRows' parameter to 'head' function to be a function.");
+
+	var self = this;
+	return self.take(numRows);
+};
+
+/** 
+ * Get X rows from the tail of the data frame.
+ *
+ * @param {int} numRows - Number of rows to take.
+ */
+DataFrame.prototype.tail = function (numRows) {
+
+	assert.isNumber(numRows, "Expected 'numRows' parameter to 'tail' function to be a function.");
+
+	var self = this;
+	return self.skip(self.count() - numRows);
+};
+
+/**
+ * Aggregate the rows of the data-frame.
+ *
+ * @param {object} [seed] - The seed value for producing the aggregation.
+ * @param {function} selector - Function that takes the seed and then each row in the data-frame and produces the aggregate value.
+ */
+DataFrame.prototype.aggregate = function (seedOrSelector, selector) {
+
+	var self = this;
+
+	if (Object.isFunction(seedOrSelector) && !selector) {
+		return E.from(self.toObjects()).aggregate(seedOrSelector);		
+	}
+	else if (selector) {
+		assert.isFunction(selector, "Expected 'selector' parameter to aggregate to be a function.");
+		return E.from(self.toObjects()).aggregate(seedOrSelector, selector);
+	}
+	else {
+		assert.isObject(seedOrSelector, "Expected 'seed' parameter to aggregate to be an object.");
+
+		return E.from(Object.keys(seedOrSelector))
+			.select(function (columnName) {
+				var columnSelector = seedOrSelector[columnName];
+				assert.isFunction(columnSelector, "Expected column/selector pairs in 'seed' parameter to aggregate.");
+				return [columnName, self.getSeries(columnName).aggregate(columnSelector)];
+			})
+			.toObject(
+				function (pair) {
+					return pair[0];
+				},
+				function (pair) {
+					return pair[1];					
+				}
+			);
+	}
+};
+
+/**
+ * Convert the data-frame to a JavaScript object.
+ *
+ * @param {function} keySelector - Function that selects keys for the resulting object.
+ * @param {valueSelector} keySelector - Function that selects values for the resulting object.
+ */
+DataFrame.prototype.toObject = function (keySelector, valueSelector) {
+
+	var self = this;
+
+	assert.isFunction(keySelector, "Expected 'keySelector' parameter to toObject to be a function.");
+	assert.isFunction(valueSelector, "Expected 'valueSelector' parameter to toObject to be a function.");
+
+	return E.from(self.toObjects()).toObject(keySelector, valueSelector);
+};
+
+/**
+ * Zip together multiple data-frames to produce a new data-frame.
+ *
+ * @param {...object} dataFrames - Each data-frame that is to be zipped.
+ * @param {function} selector - Selector function that produces a new data-frame based on the inputs.
+ */
+DataFrame.prototype.zip = function () {
+
+	var dataFrames = E.from(arguments)
+		.takeWhile(function (arg) {
+			return arg && !Object.isFunction(arg);
+		})
+		.toArray();
+
+	assert(dataFrames.length >= 0, "Expected 1 or more 'data-frame' parameters to the zip function.");
+
+	dataFrames = [this].concat(dataFrames);
+
+	var selector = E.from(arguments)
+		.skipWhile(function (arg) {
+			return arg && !Object.isFunction(arg);
+		})
+		.firstOrDefault();
+
+	assert.isFunction(selector, "Expect 'selector' parameter to zip to be a function.");
+
+	var dataForge = require('../index.js');
+	return dataForge.zipDataFrames(dataFrames, function (rows) {
+			return selector.apply(undefined, rows);
+		});
+};
+
+/**
+ * Bring the name column to the front, making it the first column in the data-frame.
+ *
+ * @param {string|array} columnOrColumns - Specifies the column or columns to bring to the front.
+ */
+DataFrame.prototype.bringToFront = function (columnOrColumns) {
+
+	if (Object.isArray(columnOrColumns)) {
+		columnOrColumns.forEach(function (columnName) {
+			assert.isString(columnName, "Expect 'columnOrColumns' parameter to bringToFront function to specify a column or columns via a string or an array of strings.");	
+		});
+	}
+	else {
+		assert.isString(columnOrColumns, "Expect 'columnOrColumns' parameter to bringToFront function to specify a column or columns via a string or an array of strings.");
+
+		columnOrColumns = [columnOrColumns]; // Convert to array for coding convenience.
+	}
+
+	var self = this;
+	var existingColumnNames = self.getColumnNames();
+	var columnsToMove = E.from(columnOrColumns) // Strip out non-existing columns.
+		.where(function (columnName) {
+			return E.from(existingColumnNames).contains(columnName);
+		})
+		.toArray();
+
+	var remainingColumnNames = E.from(existingColumnNames)
+		.where(function (columnName) {
+			return !E.from(columnsToMove).contains(columnName);
+		})
+		.toArray();
+
+	var reorderedColumnNames = columnsToMove.concat(remainingColumnNames);
+	return self.remapColumns(reorderedColumnNames);
+};
+
+/**
+ * Bring the name column to the back, making it the last column in the data-frame.
+ *
+ * @param {string|array} columnOrColumns - Specifies the column or columns to bring to the back.
+ */
+DataFrame.prototype.bringToBack = function (columnOrColumns) {
+
+	if (Object.isArray(columnOrColumns)) {
+		columnOrColumns.forEach(function (columnName) {
+			assert.isString(columnName, "Expect 'columnOrColumns' parameter to bringToBack function to specify a column or columns via a string or an array of strings.");	
+		});
+	}
+	else {
+		assert.isString(columnOrColumns, "Expect 'columnOrColumns' parameter to bringToBack function to specify a column or columns via a string or an array of strings.");
+
+		columnOrColumns = [columnOrColumns]; // Convert to array for coding convenience.
+	}
+
+	var self = this;
+	var existingColumnNames = self.getColumnNames();
+	var columnsToMove = E.from(columnOrColumns) // Strip out non-existing columns.
+		.where(function (columnName) {
+			return E.from(existingColumnNames).contains(columnName);
+		})
+		.toArray();
+
+	var remainingColumnNames = E.from(existingColumnNames)
+		.where(function (columnName) {
+			return !E.from(columnsToMove).contains(columnName);
+		})
+		.toArray();
+
+	var reorderedColumnNames = remainingColumnNames.concat(columnsToMove);
+	return self.remapColumns(reorderedColumnNames);
+};
+
+module.exports = DataFrame;
+},{"../index":6,"../index.js":6,"../src/iterators/count":53,"../src/iterators/empty":54,"../src/iterators/select":57,"../src/iterators/select-many":56,"../src/iterators/take":61,"../src/iterators/take-while":60,"../src/iterators/where":63,"./index":50,"./iterators/array":51,"./iterators/multi":55,"./iterators/skip":59,"./iterators/skip-while":58,"./iterators/validate":62,"./series":64,"./utils":65,"babyparse":7,"chai":8,"easy-table":44,"extend":45,"linq":46}],50:[function(require,module,exports){
+'use strict';
+
+var ArrayIterator = require('./iterators/array');
+var SkipIterator = require('./iterators/skip');
+var SkipWhileIterator = require('./iterators/skip-while');
+var TakeIterator = require('../src/iterators/take');
+var TakeWhileIterator = require('../src/iterators/take-while');
+
+var assert = require('chai').assert;
+var E = require('linq');
+
+var validateIterator = require('./iterators/validate');
+
+/**
+ * Implements an index for a data frame or column.
+ */
+var Index = function (values) {
+
+	var self = this;
+
+	if (Object.isFunction(values)) {
+		self._iterable = values;
+	}
+	else {
+		assert.isArray(values, "Expected 'values' parameter to Index constructor to be an array or an iterable.");
+
+		self._iterable = function () {
+			return new ArrayIterator(values);
+		};
+	}
+
+	assert.isFunction(self._iterable);
+};
+
+/**
+ * Get an iterator to iterate the values of the index.
+ */
+Index.prototype.getIterator = function () {
+	var self = this;
+	return self._iterable();
+};
+
+/**
+ * Skip a number of rows from the index.
+ *
+ * @param {int} numRows - Number of rows to skip.
+ */
+Index.prototype.skip = function (numRows) {
+	assert.isNumber(numRows, "Expected 'numRows' parameter to 'skip' function to be a number.");	
+
+	var Index = require('./index');
+
+	var self = this;
+	return new Index(function () {
+		return new SkipIterator(self.getIterator(), numRows);
+	});
+};
+
+/**
+ * Take a number of rows from the index.
+ *
+ * @param {int} numRows - Number of rows to take.
+ */
+Index.prototype.take = function (numRows) {
+	assert.isNumber(numRows, "Expected 'numRows' parameter to 'take' function to be a number.");	
+
+	var self = this;
+	return new Index(function () {
+		return new TakeIterator(self.getIterator(), numRows);
+	});
+};
+
+/**
+ * Create a new index from a slice of rows.
+ *
+ * @param {int|function} startIndexOrStartPredicate - Index where the slice starts or a predicate function that determines where the slice starts.
+ * @param {int|function} endIndexOrEndPredicate - Marks the end of the slice, one row past the last row to include. Or a predicate function that determines when the slice has ended.
+ * @param {function} [predicate] - Optional predicate to compare index against start/end index. Return true to start or stop the slice.
+ */
+Index.prototype.slice = function (startIndexOrStartPredicate, endIndexOrEndPredicate, predicate) {
+
+	var self = this;
+
+	var startIndex;
+	var endIndex;
+	var startPredicate = null;
+	var endPredicate = null;
+
+	if (predicate) {
+		assert.isFunction(predicate, "Expected 'predicate' parameter to slice function to be function.");
+	}
+
+	if (Object.isFunction(startIndexOrStartPredicate)) {
+		startPredicate = startIndexOrStartPredicate;
+	}
+	else {
+		startIndex = startIndexOrStartPredicate;
+		startPredicate = function (value) {
+				return predicate && predicate(value, startIndex) || value < startIndex;
+			};
+	}
+
+	if (Object.isFunction(endIndexOrEndPredicate)) {
+		endPredicate = endIndexOrEndPredicate;
+	}
+	else {
+		endIndex = endIndexOrEndPredicate;
+		endPredicate = function (value) {
+				return predicate && predicate(value, endIndex) || value < endIndex;
+			};
+	}
+
+	return new Index(function () {
+		return new TakeWhileIterator(
+			new SkipWhileIterator(
+				self.getIterator(),
+				startPredicate					
+			),
+			endPredicate
+		)
+	});
+};
+
+/*
+ * Extract values from the index. This forces lazy evaluation to complete.
+ */
+Index.prototype.toValues = function () {
+
+	var self = this;
+	var iterator = self.getIterator();
+	validateIterator(iterator);
+
+	var values = [];
+
+	while (iterator.moveNext()) {
+		values.push(iterator.getCurrent());
+	}
+
+	return values;
+};
+
+/*
+ * Forces lazy evaluation to complete and 'bakes' the index into memory.
+ */
+Index.prototype.bake = function () {
+
+	var self = this;
+	return new Index(self.toValues());
+};
+
+/**
+ * Count the number of rows in the index.
+ */
+Index.prototype.count = function () {
+
+	var self = this;
+	var total = 0;
+	var iterator = self.getIterator();
+
+	while (iterator.moveNext()) {
+		++total;
+	}
+
+	return total;
+};
+
+/**
+ * Get the first row of the index.
+ */
+Index.prototype.first = function () {
+
+	var self = this;
+	var iterator = self.getIterator();
+
+	if (!iterator.moveNext()) {
+		throw new Error("No rows in index.");
+	}
+
+	return iterator.getCurrent();	
+};
+
+/**
+ * Get the last row of the index.
+ */
+Index.prototype.last = function () {
+
+	var self = this;
+	var iterator = self.getIterator();
+
+	if (!iterator.moveNext()) {
+		throw new Error("No rows in index.");
+	}
+
+	var last = iterator.getCurrent();
+
+	while (iterator.moveNext()) {
+		last = iterator.getCurrent();
+	}
+
+	return last;
+};
+
+/** 
+ * Reverse the index.
+ */
+Index.prototype.reverse = function () {
+
+	var self = this;
+	return new Index(E.from(self.toValues()).reverse().toArray());
+};
+
+/** 
+ * Get X values from the head of the index.
+ *
+ * @param {int} values - Number of values to take.
+ */
+Index.prototype.head = function (values) {
+
+	assert.isNumber(values, "Expected 'values' parameter to 'head' function to be a function.");
+
+	var self = this;
+	return self.take(values);
+};
+
+/** 
+ * Get X values from the tail of the index.
+ *
+ * @param {int} values - Number of values to take.
+ */
+Index.prototype.tail = function (values) {
+
+	assert.isNumber(values, "Expected 'values' parameter to 'tail' function to be a function.");
+
+	var self = this;
+	return self.skip(self.count() - values);
+};
+
+module.exports = Index;
+},{"../src/iterators/take":61,"../src/iterators/take-while":60,"./index":50,"./iterators/array":51,"./iterators/skip":59,"./iterators/skip-while":58,"./iterators/validate":62,"chai":8,"linq":46}],51:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+
+//
+// Data-forge enumerator for iterating a standard JavaScript array.
+//
+var ArrayIterator = function (arr) {
+	assert.isArray(arr);
+
+	var self = this;
+
+	var rowIndex = -1;
+	
+	self.moveNext = function () {
+		return ++rowIndex < arr.length;
+	};
+
+	self.getCurrent = function () {
+		if (rowIndex >= 0 && rowIndex < arr.length) {
+			return arr[rowIndex];
+		}
+		else {
+			return undefined;
+		}		
+	};
+
+	//
+	// Bake the iterator into an array.
+	//
+	self.realize = function () {
+
+		var output = [];
+
+		while (self.moveNext()) {
+			output.push(self.getCurrent());
+		}
+
+		return output;
+	};
+};
+
+module.exports = ArrayIterator;
+},{"chai":8}],52:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var E = require('linq');
+
+var validateIterator = require('./validate');
+
+
+//
+// An iterator that can step multiple other iterators at once.
+//
+var MultiIterator = function (iterators) {
+	assert.isArray(iterators);
+
+	iterators.forEach(function (iterator) {
+			validateIterator(iterator);
+		});
+
+	var self = this;
+
+	var curIterator = -1;
+
+	self.moveNext = function () {				
+		
+		if (iterators.length === 0) {
+			return false;
+		}
+
+		if (curIterator < 0) {
+			++curIterator;
+		}
+		
+		for (;;) {
+			if (iterators[curIterator].moveNext()) {
+				return true;
+			}
+
+			++curIterator;
+			if (curIterator >= iterators.length) {
+				return false;
+			}
+		}
+	};
+
+	self.getCurrent = function () {
+		if (curIterator >= 0) {
+			return iterators[curIterator].getCurrent();
+		}
+		else {
+			return undefined;
+		}
+	};
+
+};
+
+module.exports = MultiIterator;
+},{"./validate":62,"chai":8,"linq":46}],53:[function(require,module,exports){
+'use strict';
+
+var CountIterator = function () {
+
+	var self = this;
+
+	var working = -1;
+
+	self.moveNext = function () {
+		++working;
+		return true;
+	};
+
+	self.getCurrent = function () {
+		if (working < 0) {
+			return undefined;
+		}
+		else {
+			return working;
+		}
+	};
+
+};
+
+module.exports = CountIterator;
+},{}],54:[function(require,module,exports){
+'use strict';
+
+/*
+ * Defines an empty iterator.
+ */
+
+var EmptyIterator = function () {
+
+	var self = this;
+
+	self.moveNext = function () {
+		return false;
+	};
+
+	self.getCurrent = function () {
+		return undefined;
+	};
+
+};
+
+module.exports = EmptyIterator;
+},{}],55:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var E = require('linq');
+
+var validateIterator = require('./validate');
+
+
+//
+// An iterator that can step multiple other iterators at once.
+//
+var MultiIterator = function (iterators) {
+	assert.isArray(iterators);
+
+	iterators.forEach(function (iterator) {
+			validateIterator(iterator);
+		});
+
+	var self = this;
+
+	var ok = false;
+
+	//
+	// Move all iterators to the next element.
+	// Returns false when complete and there are no more elements.
+	// Completes when first iterator completes.
+	//	
+	self.moveNext = function () {				
+
+		if (iterators.length > 0) {
+			ok = E.from(iterators)
+					.select(function (iterator) {
+						return iterator.moveNext();
+					})
+					.all();
+		}
+
+		return ok;
+	};
+
+	self.getCurrent = function () {
+		if (ok) {
+			return E.from(iterators)
+				.select(function (iterator) {
+					return iterator.getCurrent();
+				})
+				.toArray();
+		}
+		else {
+			return undefined;
+		}
+	};
+
+	//
+	// Bake the iterator into an array.
+	//
+	self.realize = function () {
+
+		var output = [];
+
+		while (self.moveNext()) {
+			output.push(self.getCurrent());
+		}
+
+		return output;
+	};
+};
+
+module.exports = MultiIterator;
+},{"./validate":62,"chai":8,"linq":46}],56:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var E = require('linq');
+
+var validateIterator = require('./validate');
+var ArrayIterator = require('./array');
+var SelectIterator = require('./select');
+
+//
+// An iterator that can step multiple other iterators at once.
+//
+var SelectManyIterator = function (iterator, selector) {
+
+	var self = this;
+
+	validateIterator(iterator);
+	assert.isFunction(selector);
+
+	var expandIterator = new SelectIterator(iterator, selector);
+	var childIterator = null;
+
+	self.moveNext = function () {				
+		if (!childIterator) {
+			if (!expandIterator.moveNext()) {
+				return false;
+			}
+
+			childIterator = expandIterator.getCurrent();
+			if (Object.isArray(childIterator)) {
+				childIterator = new ArrayIterator(childIterator);
+			}
+
+			return childIterator.moveNext();
+		}
+		else {
+			if (childIterator.moveNext()) {
+				return true;
+			}
+
+			if (!expandIterator.moveNext()) {
+				return false;
+			}
+
+			childIterator = expandIterator.getCurrent();
+			if (Object.isArray(childIterator)) {
+				childIterator = new ArrayIterator(childIterator);
+			}
+
+			return childIterator.moveNext();
+		}
+	};
+
+	self.getCurrent = function () {
+		return childIterator.getCurrent();
+	};
+
+	//
+	// Bake the iterator into an array.
+	//
+	self.realize = function () {
+
+		var output = [];
+
+		while (self.moveNext()) {
+			output.push(self.getCurrent());
+		}
+
+		return output;
+	};
+};
+
+module.exports = SelectManyIterator;
+},{"./array":51,"./select":57,"./validate":62,"chai":8,"linq":46}],57:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var E = require('linq');
+
+var validateIterator = require('./validate');
+
+//
+// An iterator that can step multiple other iterators at once.
+//
+var SelectIterator = function (iterator, selector) {
+
+	var self = this;
+
+	validateIterator(iterator);
+	assert.isFunction(selector);
+
+	var i = -1; //todo: test this.
+
+	self.moveNext = function () {				
+		++i;
+		return iterator.moveNext();
+	};
+
+	self.getCurrent = function () {
+		return selector(iterator.getCurrent(), i);
+	};
+
+	//
+	// Bake the iterator into an array.
+	//
+	self.realize = function () {
+
+		var output = [];
+
+		while (self.moveNext()) {
+			output.push(self.getCurrent());
+		}
+
+		return output;
+	};
+};
+
+module.exports = SelectIterator;
+},{"./validate":62,"chai":8,"linq":46}],58:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var validateIterator = require('./validate');
+
+//
+// Iterator that skips elements while the predicate returns true.
+//
+var SkipWhileIterator = function (iterator, predicate) {
+
+	validateIterator(iterator);
+	assert.isFunction(predicate);
+
+	var self = this;
+	var skipped = false;
+	
+	self.moveNext = function () {
+		for (;;) {
+			if (!iterator.moveNext()) {
+				return false;
+			}
+
+			if (skipped) {
+				// Already skipped.
+				return true;
+			}
+
+			// Skipping until predict returns false.
+			if (!predicate(iterator.getCurrent())) {
+				skipped = true;
+				return true;
+			}
+		}
+	};
+
+	self.getCurrent = function () {
+		return iterator.getCurrent();
+	};
+
+};
+
+module.exports = SkipWhileIterator;
+},{"./validate":62,"chai":8}],59:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var validateIterator = require('./validate');
+
+//
+// Data-forge enumerator for iterating a standard JavaScript array.
+//
+var SkipIterator = function (iterator, skipAmount) {
+
+	validateIterator(iterator);
+	assert.isNumber(skipAmount);
+
+	var self = this;
+
+	self.moveNext = function () {
+		while (--skipAmount >= 0 && iterator.moveNext()) {
+			// Skip first rows.
+		}
+		return iterator.moveNext();
+	};
+
+	self.getCurrent = function () {
+		return iterator.getCurrent();
+	};
+
+};
+
+module.exports = SkipIterator;
+},{"./validate":62,"chai":8}],60:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var validateIterator = require('./validate');
+
+//
+// Iterator that takes elements while the predicate returns true.
+//
+var TakeWhileIterator = function (iterator, predicate) {
+
+	validateIterator(iterator);
+	assert.isFunction(predicate);
+
+	var self = this;
+	var taking = true;
+
+	self.moveNext = function () {
+		if (!taking) {
+			return false;
+		}
+
+		if (!iterator.moveNext()) {
+			return false;
+		}
+
+		if (!predicate(iterator.getCurrent())) {
+			taking = false;
+			return false;
+		}
+
+		return true;
+	};
+
+	self.getCurrent = function () {
+		return iterator.getCurrent();
+	};
+
+};
+
+module.exports = TakeWhileIterator;
+},{"./validate":62,"chai":8}],61:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var validateIterator = require('./validate');
+
+//
+// Data-forge enumerator for iterating a standard JavaScript array.
+//
+var TakeIterator = function (iterator, takeAmount) {
+
+	validateIterator(iterator);
+	assert.isNumber(takeAmount);
+
+	var self = this;
+
+	self.moveNext = function () {
+		if (--takeAmount >= 0) {
+			return iterator.moveNext();
+		}
+		return false;
+	};
+
+	self.getCurrent = function () {
+		return iterator.getCurrent();
+	};
+
+};
+
+module.exports = TakeIterator;
+},{"./validate":62,"chai":8}],62:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+
+//
+// Validate an iterator.
+//
+module.exports = function (iterator) {
+	assert.isObject(iterator, "Expected an 'iterator' object.");
+	assert.isFunction(iterator.moveNext, "Expected iterator to have function 'moveNext'.");
+	assert.isFunction(iterator.getCurrent, "Expected iterator to have function 'getCurrent'.");
+};
+},{"chai":8}],63:[function(require,module,exports){
+'use strict';
+
+var assert = require('chai').assert;
+var validateIterator = require('./validate');
+
+//
+// Iterate that filters elements based on a predicate.
+//
+var WhereIterator = function (iterator, predicate) {
+
+	validateIterator(iterator);
+	assert.isFunction(predicate);
+
+	var self = this;
+	
+	self.moveNext = function () {
+		for (;;) {
+			if (!iterator.moveNext()) {
+				return false;
+			}
+
+			// Skipping until predict returns false.
+			if (predicate(iterator.getCurrent())) {
+				return true;
+			}
+		}
+	};
+
+	self.getCurrent = function () {
+		return iterator.getCurrent();
+	};
+
+	//
+	// Bake the iterator into an array.
+	//
+	self.realize = function () {
+
+		var output = [];
+
+		while (self.moveNext()) {
+			output.push(self.getCurrent());
+		}
+
+		return output;
+	};
+};
+
+module.exports = WhereIterator;
+},{"./validate":62,"chai":8}],64:[function(require,module,exports){
+'use strict';
+
+// 
+// Base class for series classes.
+//
+
+var assert = require('chai').assert; 
+var E = require('linq');
+var moment = require('moment');
+var ArrayIterator = require('./iterators/array');
+var validateIterator = require('./iterators/validate');
+var Index = require('./index');
+var SkipIterator = require('./iterators/skip');
+var SkipWhileIterator = require('./iterators/skip-while');
+var TakeIterator = require('../src/iterators/take');
+var TakeWhileIterator = require('../src/iterators/take-while');
+var SelectIterator = require('../src/iterators/select');
+var SelectManyIterator = require('../src/iterators/select-many');
+var MultiIterator = require('../src/iterators/multi');
+var WhereIterator = require('../src/iterators/where');
+var CountIterator = require('../src/iterators/count');
+var EmptyIterator = require('../src/iterators/empty');
+
+/**
+ * Represents a time series.
+ */
+var Series = function (config) {
+
+	var self = this;
+
+	if (!config) {
+		self._iterable = function () {
+			return new EmptyIterator();
+		};
+		return;
+	}
+
+	if (config && config.iterable) {
+		assert.isFunction(config.iterable);
+
+		self._iterable = config.iterable;
+		return;
+	}
+
+	var index;
+	var values;
+
+	if (!config.values) {
+		throw new Error("Expected 'values' field to be set on 'config' parameter to Series constructor.");
+	}
+
+	if (Object.isFunction(config.values)) {
+		values = config.values;
+	}
+	else {
+		assert.isArray(config.values, "Expected 'values' field of 'config' parameter to Series constructor be an array or an iterable.");
+
+		var valuesArray = config.values;
+
+		values = function () {
+			return new ArrayIterator(valuesArray);
+		};
+	}		
+
+	if (config.index) {
+		var inputIndex = config.index;
+		if (Object.isArray(inputIndex)) {
+
+			index = function () {
+				return new ArrayIterator(inputIndex);
+			};
+		}
+		else {
+			assert.isObject(inputIndex, "Expected 'index' parameter to Series constructor to be an object.");
+
+			index = function () {
+				return inputIndex.getIterator();
+			};
+		} 
+	}
+	else {
+		index = function () {
+			return new CountIterator();
+		};
+	}
+
+	assert.isFunction(values);
+	assert.isFunction(index);
+
+	self._iterable = function () {
+		return new MultiIterator([index(), values()]);
+	};
+};
+
+/**
+ * Get an iterator for the iterating the values of the series.
+ */
+Series.prototype.getIterator = function () {
+	var self = this;
+	return self._iterable();
+};
+
+/**
+ * Retreive the index of the series.
+ */
+Series.prototype.getIndex = function () {
+	var self = this;
+	return new Index(function () {		
+		var iterator = self.getIterator();
+		var i = -1;
+		return { //todo: can just use a select iterator here.
+			moveNext: function () {
+				++i;
+				return iterator.moveNext();
+			},
+
+			getCurrent: function () {
+				return iterator.getCurrent()[0];
+			},
+		};
+	});
+};
+
+/**
+ * Skip a number of rows in the series.
+ *
+ * @param {int} numRows - Number of rows to skip.
+ */
+Series.prototype.skip = function (numRows) {
+	assert.isNumber(numRows, "Expected 'numRows' parameter to 'skip' function to be a number.");
+
+	var self = this;
+	return new Series({
+		iterable: function () {
+			return new SkipIterator(self.getIterator(), numRows);
+		},		
+	}); 	
+};
+
+/**
+ * Skips values in the series while a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+Series.prototype.skipWhile = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'skipWhile' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return new Series({
+		iterable: function () {
+			return new SkipWhileIterator(self.getIterator(), 
+				function (pair) {
+					return predicate(pair[1]);
+				}
+			);
+		},
+	}); 	
+};
+
+/**
+ * Skips values in the series until a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+Series.prototype.skipUntil = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'skipUntil' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return self.skipWhile(function (value) { 
+		return !predicate(value); 
+	});
+};
+
+/**
+ * Take a number of rows in the series.
+ *
+ * @param {int} numRows - Number of rows to take.
+ */
+Series.prototype.take = function (numRows) {
+	assert.isNumber(numRows, "Expected 'numRows' parameter to 'take' function to be a number.");
+
+	var self = this;
+	return new Series({
+		iterable: function () {
+			return new TakeIterator(self.getIterator(), numRows);
+		},
+	});
+};
+
+/**
+ * Take values from the series while a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+Series.prototype.takeWhile = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'takeWhile' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return new Series({
+		iterable: function () {
+			return new TakeWhileIterator(self.getIterator(), 
+				function (pair) {
+					return predicate(pair[1]);
+				}
+			);
+		},
+	}); 	
+};
+
+/**
+ * Take values from the series until a condition is met.
+ *
+ * @param {function} predicate - Return true to indicate the condition met.
+ */
+Series.prototype.takeUntil = function (predicate) {
+	assert.isFunction(predicate, "Expected 'predicate' parameter to 'takeUntil' function to be a predicate function that returns true/false.");
+
+	var self = this;
+	return self.takeWhile(function (value) { 
+		return !predicate(value); 
+	});
+};
+
+/**
+ * Filter a series by a predicate selector.
+ *
+ * @param {function} filterSelectorPredicate - Predicte function to filter rows of the series.
+ */
+Series.prototype.where = function (filterSelectorPredicate) {
+	assert.isFunction(filterSelectorPredicate, "Expected 'filterSelectorPredicate' parameter to 'where' function to be a function.");
+
+	var self = this;
+	return new Series({
+		iterable: function () {
+			return new WhereIterator(self.getIterator(), 
+				function (pair) {
+					return filterSelectorPredicate(pair[1]);
+				}
+			);
+		},
+	}); 	
+};
+
+/**
+ * Generate a new series based on the results of the selector function.
+ *
+ * @param {function} selector - Selector function that transforms each value to a different data structure.
+ */
+Series.prototype.select = function (selector) {
+	assert.isFunction(selector, "Expected 'selector' parameter to 'select' function to be a function.");
+
+	var self = this;
+	return new Series({
+		iterable: function () {
+			return new SelectIterator(self.getIterator(), 
+				function (pair) {
+					return [pair[0], selector(pair[1])];
+				}
+			);
+		},		
+	}); 	
+};
+
+/**
+ * Generate a new series based on the results of the selector function.
+ *
+ * @param {function} selector - Selector function that transforms each value to a different data structure.
+ */
+Series.prototype.selectMany = function (selector) {
+	assert.isFunction(selector, "Expected 'selector' parameter to 'selectMany' function to be a function.");
+
+	var self = this;
+
+	return new Series({
+		iterable: function () {
+			return new SelectManyIterator(self.getIterator(), 
+				function (pair) {
+					return E.from(selector(pair[1]))
+						.select(function (newValue) {
+							return [pair[0], newValue];
+						})
+						.toArray();
+				}
+			);
+		},
+	}); 	
+};
+
+//
+// Throw an exception if the sort method doesn't make sense.
+//
+var validateSortMethod = function (sortMethod) {
+	assert.isString(sortMethod);
+	assert(
+		sortMethod === 'orderBy' || 
+	   sortMethod === 'orderByDescending' ||
+	   sortMethod === 'thenBy' ||
+	   sortMethod === 'thenByDescending', 
+	   "Expected 'sortMethod' to be one of 'orderBy', 'orderByDescending', 'thenBy' or 'thenByDescending', instead it is '" + sortMethod + "'."
+   );
+};
+
+//
+// Execute a batched sorting command.
+//
+var executeOrderBy = function (self, batch) {
+
+	assert.isObject(self);
+	assert.isArray(batch);
+	assert(batch.length > 0);
+
+	//
+	// Don't invoke the sort until we really know what we need.
+	//
+	var executeLazySort = function () {
+
+		batch.forEach(function (orderCmd) {
+			assert.isObject(orderCmd);
+			assert.isFunction(orderCmd.sortSelector);
+			validateSortMethod(orderCmd.sortMethod);
+		});
+
+		var pairs = self.toPairs();
+
+		return E.from(batch)
+			.aggregate(E.from(pairs), function (unsorted, orderCmd) {
+				return unsorted[orderCmd.sortMethod](function (pair) {
+					return orderCmd.sortSelector(pair[1]);
+				}); 
+			})
+			.toArray();
+	};
+
+	return new Series({
+		iterable: function () {
+			return new ArrayIterator(executeLazySort());
+		},
+	});
+};
+
+//
+// Order by values in a partcular series, either ascending or descending
+//
+var orderBy = function (self, sortMethod, sortSelector) {
+	assert.isObject(self);
+	validateSortMethod(sortMethod);
+	assert.isFunction(sortSelector);
+
+	var batchOrder = [
+		{ 
+			sortSelector: sortSelector, 
+			sortMethod: sortMethod 
+		}
+	];
+
+	var sortedDataFrame = executeOrderBy(self, batchOrder);
+	sortedDataFrame.thenBy = orderThenBy(self, batchOrder, 'thenBy');
+	sortedDataFrame.thenByDescending = orderThenBy(self, batchOrder, 'thenByDescending');	
+	return sortedDataFrame;
+};
+
+//
+// Generates a thenBy function that is attached to already ordered data frames.
+//
+var orderThenBy = function (self, batch, nextSortMethod) {
+	assert.isObject(self);
+	assert.isArray(batch);
+	assert(batch.length > 0);
+	validateSortMethod(nextSortMethod);
+	
+	return function (sortSelector) {
+		assert.isFunction(sortSelector, "Expected parameter 'sortSelector' to be a function");
+
+		var extendedBatch = batch.concat([
+			{
+				sortSelector: sortSelector,
+				sortMethod: nextSortMethod,
+			},
+		]);
+
+		var sortedDataFrame = executeOrderBy(self, extendedBatch);
+		sortedDataFrame.thenBy = orderThenBy(self, extendedBatch, 'thenBy');
+		sortedDataFrame.thenByDescending = orderThenBy(self, extendedBatch, 'thenByDescending');		
+		return sortedDataFrame;
+	};	
+};
+
+/**
+ * Sorts the series by value (ascending). 
+ */
+Series.prototype.order = function () {
+
+	var self = this;
+	return orderBy(self, 'orderBy', function (value) { 
+		return value; 
+	});
+};
+
+/**
+ * Sorts the series by value (descending). 
+ */
+Series.prototype.orderDescending = function (optionalSortSelector) {
+
+	var self = this;
+	return orderBy(self, 'orderByDescending', function (value) {
+		return value;
+	});
+};
+
+/**
+ * Sorts the series by sort selector (ascending). 
+ * 
+ * @param {function} sortSelector - An function to select a value to sort by.
+ */
+Series.prototype.orderBy = function (sortSelector) {
+
+	assert.isFunction
+
+	var self = this;
+	return orderBy(self, 'orderBy', sortSelector);
+};
+
+/**
+ * Sorts the series by sort selector (descending). 
+ * 
+ * @param {function} sortSelector - An function to select a value to sort by.
+ */
+Series.prototype.orderByDescending = function (sortSelector) {
+
+	var self = this;
+	return orderBy(self, 'orderByDescending', sortSelector);
+};
+
+/**
+ * Create a new series from a slice of rows.
+ *
+ * @param {int|function} startIndexOrStartPredicate - Index where the slice starts or a predicate function that determines where the slice starts.
+ * @param {int|function} endIndexOrEndPredicate - Marks the end of the slice, one row past the last row to include. Or a predicate function that determines when the slice has ended.
+ * @param {function} [predicate] - Optional predicate to compare index against start/end index. Return true to start or stop the slice.
+ */
+Series.prototype.slice = function (startIndexOrStartPredicate, endIndexOrEndPredicate, predicate) {
+
+	var self = this;
+
+	var startIndex;
+	var endIndex;
+	var startPredicate = null;
+	var endPredicate = null;
+
+	if (predicate) {
+		assert.isFunction(predicate, "Expected 'predicate' parameter to slice function to be function.");
+	}
+
+	if (Object.isFunction(startIndexOrStartPredicate)) {
+		startPredicate = startIndexOrStartPredicate;
+	}
+	else {
+		startIndex = startIndexOrStartPredicate;
+		startPredicate = function (value) {
+				return predicate && predicate(value, startIndex) || value < startIndex;
+			};
+	}
+
+	if (Object.isFunction(endIndexOrEndPredicate)) {
+		endPredicate = endIndexOrEndPredicate;
+	}
+	else {
+		endIndex = endIndexOrEndPredicate;
+		endPredicate = function (value) {
+				return predicate && predicate(value, endIndex) || value < endIndex;
+			};
+	}
+
+	return new Series({
+		iterable: function () {
+			return new TakeWhileIterator(
+				new SkipWhileIterator(
+					self.getIterator(),
+					function (pair) {
+						return startPredicate(pair[0]); // Check index for start condition.
+					}
+				),
+				function (pair) {
+					return endPredicate(pair[0]); // Check index for end condition.
+				}
+			);
+		},		
+	});
+};
+
+/**
+ * Move a window over the series (batch by batch), invoke a selector for each window that builds a new series.
+ *
+ * @param {integer} period - The number of rows in the window.
+ * @param {function} selector - The selector function invoked per row that builds the output series.
+ *
+ * The selector has the following parameters: 
+ *
+ *		window - Data-frame that represents the rolling window.
+ *		windowIndex - The 0-based index of the window.
+ */
+Series.prototype.window = function (period, selector) {
+
+	assert.isNumber(period, "Expected 'period' parameter to 'window' to be a number.");
+	assert.isFunction(selector, "Expected 'selector' parameter to 'window' to be a function.");
+
+	var self = this;
+
+	//todo: make this properly lazy
+
+	var index = self.getIndex().toValues();
+	var values = self.toValues();
+
+	if (values.length == 0) {
+		return new Series();
+	}
+
+	var numWindows = Math.ceil(values.length/period);
+	if (numWindows == 0) {
+		return new Series();
+	}
+	
+	var newIndexAndValues = E.range(0, numWindows)
+		.select(function (windowIndex) {
+			var _window = new Series({
+					iterable: function () {
+						return new TakeIterator(
+							new SkipIterator(
+								self.getIterator(), 
+								windowIndex*period
+							), 
+							period
+						);
+					},
+				});			
+			return selector(_window, windowIndex);
+		})
+		.toArray();
+
+	return new Series({
+		iterable: function () {
+			return new ArrayIterator(newIndexAndValues);
+		},
+	});	
+};
+
+/** 
+ * Move a rolling window over the series (row by row), invoke a selector for each window that builds a new series.
+ *
+ * @param {integer} period - The number of rows in the window.
+ * @param {function} selector - The selector function invoked per row that builds the output series.
+ *
+ * The selector has the following parameters: 
+ *
+ *		window - Series that represents the rolling window.
+ *		windowIndex - The 0-based index of the window.
+ */
+Series.prototype.rollingWindow = function (period, selector) {
+
+	assert.isNumber(period, "Expected 'period' parameter to 'rollingWindow' to be a number.");
+	assert.isFunction(selector, "Expected 'selector' parameter to 'rollingWindow' to be a function.");
+
+	var self = this;
+
+	//todo: make this properly lazy
+
+	var index = self.getIndex().toValues();
+	var values = self.toValues();
+
+	if (values.length == 0) {
+		return new Series();
+	}
+
+	var newIndexAndValues = E.range(0, values.length-period+1)
+		.select(function (windowIndex) {
+			var _window = new Series({
+					iterable: function () {
+						return new TakeIterator(new SkipIterator(self.getIterator(), windowIndex), period);
+					},
+				});			
+			return selector(_window, windowIndex);
+		})
+		.toArray();
+
+	return new Series({
+		iterable: function () {
+			return new ArrayIterator(newIndexAndValues);
+		},
+	});
+};
+
+/**
+ * Create a new series, reindexed from this series.
+ *
+ * @param {index} newIndex - The index used to generate the new series.
+ */
+Series.prototype.reindex = function (newIndex) {
+	assert.isObject(newIndex, "Expected 'newIndex' parameter to 'reindex' function to be an index.");
+
+	var self = this;
+
+	return new Series({
+		iterable: function () {
+			//
+			// Generate a map to relate an index value to a series value.
+			//
+			var indexMap = {};
+			var indexExists = {};
+
+			E.from(self.getIndex().toValues())
+				.zip(self.toValues(), 
+					function (indexValue, seriesValue) {
+						return [indexValue, seriesValue];
+					}
+				)
+				.toArray()
+				.forEach(function (pair) {
+					var index = pair[0];
+					var value = pair[1];
+
+					if (indexExists[index]) {
+						throw new Error("Duplicate index detected, failed to 'reindex'");
+					}
+
+					indexMap[index] = value;
+					indexExists[index] = true;
+				});
+
+			//
+			// Return the series values in the order specified by the new index.
+			//
+			return new ArrayIterator(E.from(newIndex.toValues())
+				.select(function (newIndexValue) {
+					return [newIndexValue, indexMap[newIndexValue]];
+				})
+				.toArray()
+			);
+		},		
+	});
+};
+
+/** 
+ * Format the data frame for display as a string.
+ */
+Series.prototype.toString = function () {
+
+	var self = this;
+	var Table = require('easy-table');
+
+	var index = self.getIndex().toValues();
+	var header = ["__index__", "__value__"];
+	var rows = E.from(self.toValues())
+			.select(function (value, rowIndex) { 
+				return [index[rowIndex], value];
 			})
 			.toArray()
 
@@ -25269,543 +28235,530 @@ BaseDataFrame.prototype.toString = function () {
 	return t.toString();
 };
 
-module.exports = BaseDataFrame;
-},{"./lazycolumn":58,"./lazydataframe":59,"./lazyindex":60,"chai":9,"easy-table":45,"linq":46}],52:[function(require,module,exports){
-'use strict';
-
-var assert = require('chai').assert;
-
-var assert = require('chai').assert;
-var E = require('linq');
-
 /**
- * Base class for indexes.
- *
- * Derives classes must implement:
- *
- *		getName - Get the name of theindex.
- *		getValues - Get the array of values from the index.
+ * Compute the percent change for each row after the first.
+ * Percentages are expressed as 0-1 values.
  */
-var BaseIndex = function () {
-	
-};
-
-/**
- * Skip a number of rows from the index.
- *
- * @param {int} numRows - Number of rows to skip.
- */
-BaseIndex.prototype.skip = function (numRows) {
-	assert.isNumber(numRows, "Expected 'numRows' parameter to 'skip' function to be a number.");	
-
-	var LazyIndex = require('./lazyindex');
+Series.prototype.percentChange = function () {
 
 	var self = this;
-	return new LazyIndex(
-		self.getName(),
-		function () {
-			return E.from(self.getValues()).skip(numRows).toArray();
-		}
-	);
+	return self.rollingWindow(2, function (window) {
+		var index = window.getIndex().skip(1).first();
+		var values = window.toValues();
+		var amountChange = values[1] - values[0]; // Compute amount of change.
+		var pctChange = amountChange / values[0]; // Compute % change.
+		return [index, pctChange]; // Return new index and value.
+	});
 };
 
 /**
- * Take a number of rows from the index.
- *
- * @param {int} numRows - Number of rows to take.
+ * Parse a series with string values to a series with int values.
  */
-BaseIndex.prototype.take = function (numRows) {
-	assert.isNumber(numRows, "Expected 'numRows' parameter to 'take' function to be a number.");	
-
-	var LazyIndex = require('./lazyindex');
+Series.prototype.parseInts = function () {
 
 	var self = this;
-	return new LazyIndex(
-		self.getName(),
-		function () {
-			return E.from(self.getValues()).take(numRows).toArray();
+	return self.select(function (value, valueIndex) {
+		if (value === undefined) {
+			return undefined;
 		}
-	);
+		else {
+			assert.isString(value, "Called parseInt on series, expected all values in the series to be strings, instead found a '" + typeof(value) + "' at index " + valueIndex);
+
+			if (value.length === 0) {
+				return undefined;
+			}
+
+			return parseInt(value);
+		}
+	});
 };
 
 /**
- * Get a subset of rows from the index.
- *
- * @param {int} index - Index where the subset starts.
- * @param {int} count - Number of rows to include in the subset.
+ * Parse a series with string values to a series with float values.
  */
-BaseIndex.prototype.getRowsSubset = function (index, count) {
-	assert.isNumber(index, "Expected 'index' parameter to getRowsSubset to be an integer.");
-	assert.isNumber(index, "Expected 'count' parameter to getRowsSubset to be an integer.");
+Series.prototype.parseFloats = function () {
+
+	var self = this;
+	return self.select(function (value, valueIndex) {
+		if (value === undefined) {
+			return undefined;
+		}
+		else {
+			assert.isString(value, "Called parseInt on series, expected all values in the series to be strings, instead found a '" + typeof(value) + "' at index " + valueIndex);
+
+			if (value.length === 0) {
+				return undefined;
+			}
+
+			return parseFloat(value);
+		}
+	});
+};
+
+/**
+ * Parse a series with string values to a series with date values.
+ *
+ * @param {string} [formatString] - Optional formatting string for dates.
+ */
+Series.prototype.parseDates = function (formatString) {
+
+	if (formatString) {
+		assert.isString(formatString, "Expected optional 'formatString' parameter to parseDates to be a string (if specified).");
+	}
+
+	var self = this;
+	return self.select(function (value, valueIndex) {
+		if (value === undefined) {
+			return undefined;
+		}
+		else {
+			assert.isString(value, "Called parseInt on series, expected all values in the series to be strings, instead found a '" + typeof(value) + "' at index " + valueIndex);
+
+			if (value.length === 0) {
+				return undefined;
+			}
+
+			return moment(value, formatString).toDate();
+		}
+	});
+};
+
+/**
+ * Convert a series of values of different types to a series of string values.
+ *
+ * @param {string} [formatString] - Optional formatting string for dates.
+ */
+Series.prototype.toStrings = function (formatString) {
+
+	if (formatString) {
+		assert.isString(formatString, "Expected optional 'formatString' parameter to parseDates to be a string (if specified).");
+	}
+
+	var self = this;
+	return self.select(function (value) {
+		if (value === undefined) {
+			return undefined;
+		}
+		else if (value === null) {
+			return null;
+		}
+		else if (formatString && Object.isDate(value)) {
+			return moment(value).format(formatString);
+		}
+		else if (formatString && moment.isMoment(value)) {
+			return value.format(formatString);
+		}
+		else {
+			return value.toString();	
+		}		
+	});
+};
+
+/** 
+  * Detect the actual types of the values that comprised the series and their frequency.
+  * Returns a new series containing the type information.
+  */
+Series.prototype.detectTypes = function () {
 
 	var self = this;
 
-	var LazyIndex = require('./lazyindex');
+	var DataFrame = require('./dataframe');
+	return new DataFrame({
+		columnNames: ["Type", "Frequency"],
+		rows: function () { //todo: make this properly lazy.
+			var values = self.toValues();
+			var totalValues = values.length;
 
-	return new LazyIndex(
-		self.getName(),
-		function () {
-			return E.from(self.getValues())
-				.skip(index)
-				.take(count)
-				.toArray();
-		}
-	);
-};
-
-
-module.exports = BaseIndex;
-},{"./lazyindex":60,"chai":9,"linq":46}],53:[function(require,module,exports){
-'use strict';
-
-//
-// Builds a DataFrame from raw data.
-// Input data is an array of arrays... including header and index.
-//
-
-var DataFrame = require('./dataframe');
-
-var E = require('linq');
-var moment = require('moment');
-require('sugar');
-
-//
-// http://pietschsoft.com/post/2008/01/14/javascript-inttryparse-equivalent
-//
-function tryParseFloat(str, defaultValue) {
-     var retValue = defaultValue;
-     if (str) {
-         if(str.length > 0) {
-             if (!isNaN(str)) {
-                 retValue = parseFloat(str);
-             }
-         }
-     }
-     return retValue;
-}
-
-module.exports = function (rows, options) {
-	
-	if (!options) {
-		options = {};
-	}
-	if (!options.parse_dates) {
-		options.parse_dates = [];		
-	}
-
-	if (rows.length == 0) {
-		// Handle empty set of rows.
-		return new DataFrame([], []);
-	}
-	
-	var columnNames = rows[0];
-	var values = E 
-		.from(rows)
-		.skip(1) // Skip header.
-		.toArray();	
-		
-	var parseDates = E
-		.from(columnNames)
-		.select(function (columnName) {
-			return options.parse_dates.indexOf(columnName) >= 0;
-		})	
-		.toArray();				
-	var values = E 
-		.from(rows)
-		.skip(1) // Skip header.
-		.select(function (row) {
-			return E
-				.from(row)
-				.select(function (col) { // Auto-parse numbers.
-					var val = tryParseFloat(col, null);
-					if (val == null) {
-						return col;
+			var typeFrequencies = E.from(values)
+				.select(function (value) {
+					var valueType = typeof(value);
+					if (valueType === 'object') {
+						if (Object.isDate(value)) {
+							valueType = 'date';
+						}
 					}
-					else {
-						return val;
-					}					
+					return valueType;
 				})
-				.toArray();					
-		})
-		.select(function (row) { // Parse requested dates.
-			var out = [];
-			for (var i = 0; i < row.length; ++i) {
-				if (parseDates[i]) {
-					out.push(moment(row[i]).toDate());	
-				}
-				else {
-					out.push(row[i]);
-				}						
-			} 			
-			return out;			
-		})
-		.toArray();	
-		
-	return new DataFrame(columnNames, values); 
-};
-},{"./dataframe":55,"linq":46,"moment":47,"sugar":48}],54:[function(require,module,exports){
-'use strict';
+				.aggregate({}, function (accumulated, valueType) {
+					var typeInfo = accumulated[valueType];
+					if (!typeInfo) {
+						typeInfo = {
+							count: 0
+						};
+						accumulated[valueType] = typeInfo;
+					}
+					++typeInfo.count;
+					return accumulated;
+				});
 
-//
-// Implements a time series data structure.
-//
-
-var BaseColumn = require('./basecolumn');
-var LazyIndex = require('./lazyindex');
-
-var assert = require('chai').assert;
-var E = require('linq');
-var inherit = require('./inherit');
-
-/**
- * Represents a column in a data frame.
- */
-var Column = function (name, values, index) {
-	assert.isString(name, "Expected 'name' parameter to Column constructor be a string.");
-	assert.isArray(values, "Expected 'values' parameter to Column constructor be an array.");
-
-	if (index) {
-		assert.isObject(index, "Expected 'index' parameter to Column constructor to be an object.");
-	}
-
-	var self = this;
-	self._name = name;
-	self._values = values;	
-	self._index = index || 
-		new LazyIndex(
-			"__index___",
-			function () {
-				return E.range(0, values.length).toArray();
-			}
-		);
+			return new ArrayIterator(
+				E.from(Object.keys(typeFrequencies))
+					.select(function (valueType) {
+						return [
+							valueType,
+							(typeFrequencies[valueType].count / totalValues) * 100
+						];
+					})
+					.toArray()
+			);
+		},		
+	});
 };
 
-var parent = inherit(Column, BaseColumn);
+/** 
+  * Detect the frequency of values in the series.
+  * Returns a new series containing the information.
+  */
+Series.prototype.detectValues = function () {
 
-/**
- * Retreive the name of the column.
- */
-Column.prototype.getName = function () {
 	var self = this;
-	return self._name;
-}
 
-/**
- * Retreive the values of the column.
- */
-Column.prototype.getValues = function () {
-	var self = this;
-	return self._values;
+	var DataFrame = require('./dataframe');
+	return new DataFrame({
+		columnNames: ["Value", "Frequency"],
+		rows: function () {
+			var values = self.toValues();
+			var totalValues = values.length;
+
+			var valueFrequencies = E.from(values)
+				.aggregate({}, function (accumulated, value) {
+					var valueKey = value.toString() + "-" + typeof(value);
+					var valueInfo = accumulated[valueKey];
+					if (!valueInfo) {
+						valueInfo = {
+							count: 0,
+							value: value,
+						};
+						accumulated[valueKey] = valueInfo;
+					}
+					++valueInfo.count;
+					return accumulated;
+				});
+
+			return new ArrayIterator(
+				E.from(Object.keys(valueFrequencies))
+					.select(function (valueKey) {
+						var valueInfo = valueFrequencies[valueKey];
+						return [
+							valueInfo.value,
+							(valueInfo.count / totalValues) * 100
+						];
+					})
+					.toArray()
+			);
+		},
+	});
 };
 
 /**
- * Retreive the index of the column.
- */
-Column.prototype.getIndex = function () {
-	var self = this;
-	return self._index;
-};
-
-module.exports = Column;
-},{"./basecolumn":50,"./inherit":57,"./lazyindex":60,"chai":9,"linq":46}],55:[function(require,module,exports){
-'use strict';
-
-//
-// Implements a data frame data structure.
-//
-
-var BaseDataFrame = require('./basedataframe');
-var LazyIndex = require('./lazyindex');
-
-var assert = require('chai').assert;
-var E = require('linq');
-var fs = require('fs');
-var inherit = require('./inherit');
-
-var DataFrame = function (columnNames, values, index) {
-	assert.isArray(columnNames, "Expected 'columnNames' parameter to DataFrame constructor to be an array.");
-	assert.isArray(values, "Expected 'values' parameter to DataFrame constructor to be an array.");
-
-	if (index) {
-		assert.isObject(index, "Expected 'index' parameter to DataFrame constructor to be an object.");
-	}
-	
-	var self = this;
-	self._columnNames = columnNames;
-	self._values = values;
-	self._index = index || 
-		new LazyIndex(
-			"__index___",
-			function () {
-				return E.range(0, values.length).toArray();
-			}
-		);
-};
-
-var parent = inherit(DataFrame, BaseDataFrame);
-
-/**
- * Get the index of the data frame.
- */
-DataFrame.prototype.getIndex = function () {
-	var self = this;
-	return self._index;
-};
-
-/**
- * Get the names of the columns in the data frame.
- */
-DataFrame.prototype.getColumnNames = function () {
-	var self = this;
-	return self._columnNames;
-};
-
-/**
- * Get the values of all rows in the data frame.
- */
-DataFrame.prototype.getValues = function () {
-	var self = this;
-	return self._values;
-};
-
-module.exports = DataFrame;
-},{"./basedataframe":51,"./inherit":57,"./lazyindex":60,"chai":9,"fs":1,"linq":46}],56:[function(require,module,exports){
-'use strict';
-
-var BaseIndex = require('./baseindex');
-
-var assert = require('chai').assert;
-var E = require('linq');
-var inherit = require('./inherit');
-
-/**
- * Implements an index for a data frame or column.
- */
-var Index = function (name, values) {
-	assert.isString(name, "Expected 'name' parameter to Index constructor to be a string.");
-	assert.isArray(values, "Expected 'values' parameter to Index constructor to be an array.");
-
-	var self = this;
-	self._name = name;
-	self._values = values;
-};
-
-var parent = inherit(Index, BaseIndex);
-
-/**
- * Get the name of the index.
- */
-Index.prototype.getName = function () {
-	var self = this;
-	return self._name;
-};
-
-/**
- * Get the array of values from the index.
- */
-Index.prototype.getValues = function () {
-	var self = this;
-	return self._values;
-};
-
-module.exports = Index;
-},{"./baseindex":52,"./inherit":57,"chai":9,"linq":46}],57:[function(require,module,exports){
-'use strict';
-
-//
-// http://oli.me.uk/2013/06/01/prototypical-inheritance-done-right/
-//
-
-/*
- * Extends one class with another.
+ * Produces a new series with all string values truncated to the requested maximum length.
  *
- * @param {Function} destination The class that should be inheriting things.
- * @param {Function} source The parent class that should be inherited from.
- * @return {Object} The prototype of the parent.
+ * @param {int} maxLength - The maximum length of the string values after truncation.
  */
-function inherit(destination, source) {
-    destination.prototype = Object.create(source.prototype);
-    destination.prototype.constructor = destination;
-    return source.prototype;
-}
-
-
-module.exports = inherit;
-},{}],58:[function(require,module,exports){
-'use strict';
-
-//
-// Implements a column of a data frame.
-//
-
-var BaseColumn = require('./basecolumn');
-var LazyIndex = require('./lazyindex');
-
-var assert = require('chai').assert;
-var E = require('linq');
-var inherit = require('./inherit');
-
-/**
- * Represents a lazy-evaluated column in a data frame.
- */
-var LazyColumn = function (name, valuesFn, indexFn) {
-	assert.isString(name, "Expected 'name' parameter to Column constructor be a string.");
-	assert.isFunction(valuesFn, "Expected 'valuesFn' parameter to LazyColumn constructor be a function.");
-
-	if (indexFn) {
-		assert.isFunction(valuesFn, "Expected 'indexFn' parameter to LazyColumn constructor to be a function.");
-	}
+Series.prototype.truncateStrings = function (maxLength) {
+	assert.isNumber(maxLength, "Expected 'maxLength' parameter to 'truncateStrings' to be an integer.");
 
 	var self = this;
-	self._name = name;
-	self._valuesFn = valuesFn;	
-	self._indexFn = indexFn || 
-		// Default to generated index range.
-		function () {
-			return new LazyIndex(
-				"__index__",
-				function () {
-					return E.range(0, self.getValues().length).toArray();
+	return self
+		.select(function (value) {
+			if (Object.isString(value)) {
+				if (value.length > maxLength) {
+					return value.substring(0, maxLength);
 				}
-			);
-		};
-};
+			}
 
-var parent = inherit(LazyColumn, BaseColumn);
-
-/**
- * Retreive the name of the column.
- */
-LazyColumn.prototype.getName = function () {
-	var self = this;
-	return self._name;
-}
-
-/**
- * Retreive the values of the column.
- */
-LazyColumn.prototype.getValues = function () {
-	var self = this;
-	return self._valuesFn();
+			return value;
+		});
 };
 
 /*
- * Retreive the index for this column.
+ * Extract values from the series. This forces lazy evaluation to complete.
  */
-LazyColumn.prototype.getIndex = function () {
+Series.prototype.toValues = function () {
+
 	var self = this;
-	return self._indexFn();
-};
+	var iterator = self.getIterator();
+	validateIterator(iterator);
 
-module.exports = LazyColumn;
-},{"./basecolumn":50,"./inherit":57,"./lazyindex":60,"chai":9,"linq":46}],59:[function(require,module,exports){
-'use strict';
+	var values = [];
 
-//
-// Implements a lazily evaluated data frame.
-//
-
-var LazyColumn = require('./lazycolumn');
-var BaseDataFrame = require('./basedataframe');
-var LazyIndex = require('./lazyindex');
-
-var assert = require('chai').assert;
-var E = require('linq');
-var inherit = require('./inherit');
-
-var LazyDataFrame = function (columnNamesFn, valuesFn, indexFn) {
-	assert.isFunction(columnNamesFn, "Expected 'columnNamesFn' parameter to LazyDataFrame constructor to be a function.");
-	assert.isFunction(valuesFn, "Expected 'valuesFn' parameter to LazyDataFrame constructor to be a function.");
-
-	if (indexFn) {
-		assert.isFunction(valuesFn, "Expected 'indexFn' parameter to LazyDataFrame constructor to be a function.");
+	while (iterator.moveNext()) {
+		values.push(iterator.getCurrent()[1]);
 	}
-	
-	var self = this;
-	self._columnNamesFn = columnNamesFn;
-	self._valuesFn = valuesFn;	
-	self._indexFn = indexFn || 
-		// Default to generated index range.
-		function () {
-			return new LazyIndex(
-				"__index__",
-				function () {
-					return E.range(0, self.getValues().length).toArray();
-				}
-			);
-		};
-};
 
-var parent = inherit(LazyDataFrame, BaseDataFrame);
-
-/**
- * Get the index of the data frame.
- */
-LazyDataFrame.prototype.getIndex = function () {
-	var self = this;
-	return self._indexFn();
+	return values;
 };
 
 /**
- * Get the names of the columns in the data frame.
+ * Forces lazy evaluation to complete and 'bakes' the series into memory.
  */
-LazyDataFrame.prototype.getColumnNames = function () {
+Series.prototype.bake = function () {
+
 	var self = this;
-	return self._columnNamesFn();
+
+	return new Series({ 
+		values: self.toValues(), 
+		index: self.getIndex().bake(),
+	});
 };
 
 /**
- * Get the values of all rows in the data frame.
+ * Retreive the data as pairs of [index, value].
  */
-LazyDataFrame.prototype.getValues = function () {
-	var self = this;
-	return self._valuesFn();
-};
-
-
-
-module.exports = LazyDataFrame;
-},{"./basedataframe":51,"./inherit":57,"./lazycolumn":58,"./lazyindex":60,"chai":9,"linq":46}],60:[function(require,module,exports){
-'use strict';
-
-var BaseIndex = require('./baseindex');
-
-var assert = require('chai').assert;
-var E = require('linq');
-var inherit = require('./inherit');
-
-/**
- * Implements an lazy-evaluated index for a data frame or column.
- */
-var LazyIndex = function (name, valuesFn) {
-	assert.isString(name, "Expected 'name' parameter to Index constructor to be a string.");
-	assert.isFunction(valuesFn, "Expected 'valuesFn' parameter to Index constructor to be a function.");
+Series.prototype.toPairs = function () {
 
 	var self = this;
-	self._name = name;
-	self._valuesFn = valuesFn;
-};
+	var iterator = self.getIterator();
+	validateIterator(iterator);
 
-var parent = inherit(LazyIndex, BaseIndex);
+	var pairs = [];
 
-/**
- * Get the name of the index.
- */
-LazyIndex.prototype.getName = function () {
-	var self = this;
-	return self._name;
+	while (iterator.moveNext()) {
+		pairs.push(iterator.getCurrent());
+	}
+
+	return pairs;
 };
 
 /**
- * Get the array of values from the index.
+ * Count the number of rows in the series.
  */
-LazyIndex.prototype.getValues = function () {
+Series.prototype.count = function () {
+
 	var self = this;
-	return self._valuesFn();
+	var total = 0;
+	var iterator = self.getIterator();
+
+	while (iterator.moveNext()) {
+		++total;
+	}
+
+	return total;
 };
 
-module.exports = LazyIndex;
-},{"./baseindex":52,"./inherit":57,"chai":9,"linq":46}],61:[function(require,module,exports){
+/**
+ * Get the first row of the series.
+ */
+Series.prototype.first = function () {
+
+	var self = this;
+	var iterator = self.getIterator();
+
+	if (!iterator.moveNext()) {
+		throw new Error("No rows in series.");
+	}
+
+	return iterator.getCurrent()[1];
+};
+
+/**
+ * Get the last row of the series.
+ */
+Series.prototype.last = function () {
+
+	var self = this;
+	var iterator = self.getIterator();
+
+	if (!iterator.moveNext()) {
+		throw new Error("No rows in series.");
+	}
+
+	var last = iterator.getCurrent();
+
+	while (iterator.moveNext()) {
+		last = iterator.getCurrent();
+	}
+
+	return last[1];
+};
+
+/** 
+ * Reverse the series.
+ */
+Series.prototype.reverse = function () {
+
+	var self = this;
+
+	return new Series({
+			values: E.from(self.toValues()).reverse().toArray(),
+			index: self.getIndex().reverse(),
+		});
+};
+
+/** 
+ * Inflate a series to a data-frame.
+ *
+ * @param {function} [selector] - Optional selector function that transforms each value in the series to a row in the new data-frame.
+ */
+Series.prototype.inflate = function (selector) {
+
+	var self = this;
+
+	if (selector) {
+		assert.isFunction(selector, "Expected 'selector' parameter to 'inflate' function to be a function.");
+	}
+	else {
+		selector = function (value) {
+			return value;
+		}
+	}
+
+	var DataFrame = require('./dataframe');
+	return new DataFrame({
+		iterable: function () {
+			return self.select(selector).getIterator();
+		},
+	});
+};
+
+/** 
+ * Get X values from the head of the series.
+ *
+ * @param {int} values - Number of values to take.
+ */
+Series.prototype.head = function (values) {
+
+	assert.isNumber(values, "Expected 'values' parameter to 'head' function to be a function.");
+
+	var self = this;
+	return self.take(values);
+};
+
+/** 
+ * Get X values from the tail of the series.
+ *
+ * @param {int} values - Number of values to take.
+ */
+Series.prototype.tail = function (values) {
+
+	assert.isNumber(values, "Expected 'values' parameter to 'tail' function to be a function.");
+
+	var self = this;
+	return self.skip(self.count() - values);
+};
+
+/**
+ * Sum the values in a series.
+ */
+Series.prototype.sum = function () {
+
+	var self = this;
+	var self = this;
+	return self.aggregate(
+		function (prev, value) {
+			return prev + value;
+		}
+	);
+};
+
+/**
+ * Average the values in a series.
+ */
+Series.prototype.average = function () {
+
+	var self = this;
+	return self.sum() / self.count();
+};
+
+/**
+ * Get the min value in the series.
+ */
+Series.prototype.min = function () {
+
+	var self = this;
+	return self.aggregate(
+		function (prev, value) {
+			return Math.min(prev, value);
+		}
+	);
+};
+
+/**
+ * Get the max value in the series.
+ */
+Series.prototype.max = function () {
+
+	var self = this;
+	return self.aggregate(
+		function (prev, value) {
+			return Math.max(prev, value);
+		}
+	);
+};
+
+/**
+ * Aggregate the values in the series.
+ *
+ * @param {object} [seed] - The seed value for producing the aggregation.
+ * @param {function} selector - Function that takes the seed and then each value in the series and produces the aggregate value.
+ */
+Series.prototype.aggregate = function (seedOrSelector, selector) {
+
+	var self = this;
+
+	if (Object.isFunction(seedOrSelector) && !selector) {
+
+		return E.from(self.skip(1).toValues())
+			.aggregate(self.first(), seedOrSelector);
+	}
+	else {
+		assert.isFunction(selector, "Expected 'selector' parameter to aggregate to be a function.");
+
+		return E.from(self.toValues())
+			.aggregate(seedOrSelector, selector);
+	}
+};
+
+/**
+ * Convert the series to a JavaScript object.
+ *
+ * @param {function} keySelector - Function that selects keys for the resulting object.
+ * @param {valueSelector} keySelector - Function that selects values for the resulting object.
+ */
+Series.prototype.toObject = function (keySelector, valueSelector) {
+
+	var self = this;
+
+	assert.isFunction(keySelector, "Expected 'keySelector' parameter to toObject to be a function.");
+	assert.isFunction(valueSelector, "Expected 'valueSelector' parameter to toObject to be a function.");
+
+	return E.from(self.toValues()).toObject(keySelector, valueSelector);
+};
+
+/**
+ * Zip together multiple series to produce a new series.
+ *
+ * @param {...series} series - Each series that is to be zipped.
+ * @param {function} selector - Selector function that produces a new series based on the inputs.
+ */
+Series.prototype.zip = function () {
+
+	var inputSeries = E.from(arguments)
+		.takeWhile(function (arg) {
+			return arg && !Object.isFunction(arg);
+		})
+		.toArray();
+
+	assert(inputSeries.length >= 0, "Expected 1 or more 'series' parameters to the zip function.");
+
+	inputSeries = [this].concat(inputSeries);
+
+	var selector = E.from(arguments)
+		.skipWhile(function (arg) {
+			return arg && !Object.isFunction(arg);
+		})
+		.firstOrDefault();
+
+	assert.isFunction(selector, "Expect 'selector' parameter to zip to be a function.");
+
+	var dataForge = require('../index.js');
+	return dataForge.zipSeries(inputSeries, function (values) {
+			return selector.apply(undefined, values);
+		});
+};
+
+module.exports = Series;
+},{"../index.js":6,"../src/iterators/count":53,"../src/iterators/empty":54,"../src/iterators/multi":55,"../src/iterators/select":57,"../src/iterators/select-many":56,"../src/iterators/take":61,"../src/iterators/take-while":60,"../src/iterators/where":63,"./dataframe":49,"./index":50,"./iterators/array":51,"./iterators/skip":59,"./iterators/skip-while":58,"./iterators/validate":62,"chai":8,"easy-table":44,"linq":46,"moment":47}],65:[function(require,module,exports){
 'use strict';
 
 var E = require('linq');
@@ -25823,4 +28776,4 @@ module.exports = {
 	},
 
 };
-},{"linq":46}]},{},[6]);
+},{"linq":46}]},{},[5]);

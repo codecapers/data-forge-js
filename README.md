@@ -4,11 +4,17 @@ JavaScript data transformation and analysis toolkit inspired by Pandas and LINQ.
 
 Works in both NodeJS and the browser. 
 
-[Also available for C#](https://github.com/Real-Serious-Games/data-forge-cs).
+[Also in development for C#](https://github.com/data-forge/data-forge-cs).
 
 ----------
 
-This project is a work in progress, please don't use unless you want to be an early adopter. Please expect API changes. Please contribute and help guide the direction of *data-forge*.
+**Warning**: This project is a work in progress, please don't use unless you want to be an early adopter. Please expect API changes. Please contribute and help guide the direction of *data-forge*.
+
+Note that some features described in this README are not yet implemented, although that list grows smaller every day.
+
+# Generated API docs
+
+See here for [generated API docs](./docs/api.md) that are taking shape.
 
 # Contents
 
@@ -16,90 +22,103 @@ This project is a work in progress, please don't use unless you want to be an ea
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
-- [Project Aims](#project-aims)
-- [Driving Principles](#driving-principles)
-- [Implementation](#implementation)
+- [Project Overview](#project-overview)
+  - [Project Aims](#project-aims)
+  - [Driving Principles](#driving-principles)
+  - [Implementation](#implementation)
 - [Installation](#installation)
   - [NodeJS installation and setup](#nodejs-installation-and-setup)
+    - [Data-Forge plugins under Node.js](#data-forge-plugins-under-nodejs)
   - [Browser installation and setup](#browser-installation-and-setup)
+    - [Data-Forge plugins under the browser](#data-forge-plugins-under-the-browser)
+  - [Meteor installation and setup](#meteor-installation-and-setup)
   - [Getting the code](#getting-the-code)
 - [Key Concepts](#key-concepts)
-  - [Data Source](#data-source)
-  - [Data Format](#data-format)
   - [Data Frame](#data-frame)
   - [Row](#row)
+  - [Series](#series)
   - [Column](#column)
   - [Index](#index)
+  - [Lazy Evaluation](#lazy-evaluation)
+  - [Iterator](#iterator)
 - [Basic Usage](#basic-usage)
   - [Creating a Data Frame](#creating-a-data-frame)
-  - [Immutability and Chained Functions](#immutability-and-chained-functions)
+  - [Setting an index](#setting-an-index)
 - [Working with data](#working-with-data)
-  - [Loading data](#loading-data)
-  - [Saving data](#saving-data)
-  - [Data Sources and Formats](#data-sources-and-formats)
-    - [NodeJS data sources](#nodejs-data-sources)
-    - [Browser data sources](#browser-data-sources)
-    - [Data formats](#data-formats)
-    - [Custom data source](#custom-data-source)
-    - [Custom data format](#custom-data-format)
-- [Data exploration and visualization](#data-exploration-and-visualization)
-  - [Console output](#console-output)
-  - [Visual output](#visual-output)
-- [Accessing the data](#accessing-the-data)
-  - [Accessing all values](#accessing-all-values)
-  - [Column access](#column-access)
-  - [Accessing column values](#accessing-column-values)
-- [Data transformation](#data-transformation)
-  - [Data frame transformation](#data-frame-transformation)
-  - [Column transformation](#column-transformation)
-  - [Data frame and column filtering](#data-frame-and-column-filtering)
-  - [LINQ functions](#linq-functions)
+  - [CSV](#csv)
+  - [JSON](#json)
+  - [XML](#xml)
+  - [YAML](#yaml)
+  - [Reading and writing files in Node.js](#reading-and-writing-files-in-nodejs)
+  - [Extracting rows from a data frame](#extracting-rows-from-a-data-frame)
+  - [Extracting columns and series from a data frame](#extracting-columns-and-series-from-a-data-frame)
+  - [Enumerating a series](#enumerating-a-series)
+  - [Enumerating an index](#enumerating-an-index)
   - [Adding a column](#adding-a-column)
   - [Replacing a column](#replacing-a-column)
   - [Removing a column](#removing-a-column)
-  - [Data frame aggregation](#data-frame-aggregation)
-  - [Data frame window](#data-frame-window)
-- [Examples](#examples)
+- [Immutability and Chained Functions](#immutability-and-chained-functions)
+- [Data exploration and visualization](#data-exploration-and-visualization)
+  - [Console output](#console-output)
+  - [Visual output](#visual-output)
+- [Data transformation](#data-transformation)
+  - [Data frame transformation](#data-frame-transformation)
+  - [Series transformation](#series-transformation)
+  - [Data frame and series filtering](#data-frame-and-series-filtering)
+  - [LINQ functions](#linq-functions)
+  - [Aggregation](#aggregation)
+  - [Rolling window](#rolling-window)
+- [Node.js examples](#nodejs-examples)
   - [Working with CSV files](#working-with-csv-files)
   - [Working with JSON files](#working-with-json-files)
-  - [Working with MongoDB](#working-with-mongodb)
+  - [Working a massive CSV file](#working-a-massive-csv-file)
+  - [Working with a MongoDB collection](#working-with-a-mongodb-collection)
+  - [Working with a massive MongoDB collection](#working-with-a-massive-mongodb-collection)
   - [Working with HTTP](#working-with-http)
-    - [NodeJS](#nodejs)
-    - [Browser](#browser)
+- [Browser examples](#browser-examples)
+  - [Working with HTTP in the browser](#working-with-http-in-the-browser)
+  - [Working with HTTP in AngularJS](#working-with-http-in-angularjs)
+  - [Visualisation with Flot](#visualisation-with-flot)
+  - [Visualisation with Highstock](#visualisation-with-highstock)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-# Project Aims
+# Project Overview
+
+A short overview of the aims, principles and implementation methods for this project.
+
+## Project Aims
 
 The aims of this project:
 
-- To combine the best aspects of [Pandas](https://en.wikipedia.org/wiki/Pandas_(software)) and [LINQ](https://en.wikipedia.org/wiki/Language_Integrated_Query) and make them available in JavaScript and C#.
-- To be able to load data, transform and save data.
+- To combine the best aspects of [Pandas](https://en.wikipedia.org/wiki/Pandas_(software)) and [LINQ](https://en.wikipedia.org/wiki/Language_Integrated_Query) and make them available in JavaScript.
+- To be able to load, transform and save data.
 - To be able to prepare data for visualization. 
 - Be able to load massive data files.
 
-# Driving Principles 
+## Driving Principles 
 
 The principles that drive decision making and tradeoffs:
 
-- Simple, easy to learn, easy to use.
+- The API should be simple, easy to learn and easy to use.
 - Minimize the magic, everything should be understandable, the API should be orthogonal.
-- High performance.
-- Be able to use the same (or very similar) API in both Javascript and C#.
-- The code you build during interactive data exploration should be transplantable to an app or microservice.
+- The library should have high performance.
+- Be able to use a similar API in both Javascript and C#.
+- The code you build during interactive data exploration should be transplantable to an webapp, server or microservice.
 
-# Implementation
+## Implementation
 
 General implementation goals:
 
-- Immutable, every operation generates a new immutable data set.
+- Immutable: every operation generates a new immutable data set.
 - Lazy evaluation, to make the performance of immutability acceptable.
-- Extensible via plugins for data sources and formats.
+- Should be easily extensible.
+- All the core code is created through test driven development.
 
 
 ----------
 
-The rest of the README defines the setup and usage of data-forge. Certain features described here are not implemented yet. 
+The rest of the README defines the setup and usage of Data-Forge. Certain features described here are not implemented yet. 
 
 # Installation
 
@@ -113,6 +132,26 @@ Require the module into your script:
 
 	var dataForge = require('data-forge');
 
+### Data-Forge plugins under Node.js
+
+Plugins are typically loaded into the Data-Forge namespace as follows, using [*data-forge-from-yahoo*](https://www.npmjs.com/package/data-forge-from-yahoo) as an example. 
+
+Install via NPM:
+
+	npm install --save data-forge-from-yahoo
+
+Import the module and *use* it:
+
+	var dataForge = require('data-forge');
+	dataForge.use(require('data-forge-from-yahoo'));
+
+You can use functions defined by the plugin, eg
+
+	dataForge.fromYahoo('MSFT')
+		.then(function (dataFrame) {
+			// ... use the data returned from Yahoo ...
+		}); 
+
 ## Browser installation and setup
 
 Install via [Bower](https://en.wikipedia.org/wiki/Bower_(software)):
@@ -124,344 +163,439 @@ Include the main script in your HTML file:
 	<script src="bower_components/data-forge/data-forge.js"></script>
 
 You can now access the global `dataForge` variable.
+
+### Data-Forge plugins under the browser
+
+As in the Node.js example, plugins are typically loaded into the Data-Forge namespace. Example using [*data-forge-from-yahoo*](https://www.npmjs.com/package/data-forge-from-yahoo). 
+
+Install via Bower:
+
+	bower install --save data-forge-from-yahoo
+
+Include in your HTML file:
+
+	<script src="bower_components/data-forge/data-forge.js"></script>
+	<script src="bower_components/data-forge-from-yahoo/data-forge-from-yahoo.js"></script>
+
+Use functions defined by the plugin, eg:
  
+	dataForge.fromYahoo('MSFT')
+		.then(function (dataFrame) {
+			// ... use the data returned from Yahoo ...
+		}); 
+
+## Meteor installation and setup
+
+Coming in the future. Can anyone help with that?
+
 ## Getting the code
 
-Clone, fork or download the code from Github:
+Install via NPM and Bower as described in previous sections or clone, fork or download the code from GitHub:
 
-[https://github.com/Real-Serious-Games/data-forge-js](https://github.com/Real-Serious-Games/data-forge-js)
+[https://github.com/data-forge/data-forge-js](https://github.com/data-forge/data-forge-js)
 
 
 # Key Concepts
 
-This section explains the key concepts related to *data-forge*.
-
-## Data Source
-
-A plugin to load data from or save data to a particular data source. Examples include *file*, [*mongodb*](https://en.wikipedia.org/wiki/MongoDB) and [*HTTP*](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol) ([REST API](https://en.wikipedia.org/wiki/Representational_state_transfer)) for NodeJS and just *HTTP* for the browser.
-
-## Data Format
-
-A plugin to load or save data in a particular format. Examples include [*CSV*](https://en.wikipedia.org/wiki/Comma-separated_values) and [*JSON*](https://en.wikipedia.org/wiki/JSON). 
+This section explains the key concepts of *Data-Forge*.
 
 ## Data Frame
 
-This is the *main* concept. A matrix of data structured as rows and columns. Has an implicit or explicit index. Think of it as a spreadsheet in memory.
+This is the *main* concept. A matrix of data structured as rows and columns. Can be considered a sequence of rows. Has an implicit or explicit index. Think of it as a spreadsheet in memory.
+
+A *data-frame* can be easily constructed from various formats and it can be exported to various formats. 
 
 ## Row
 
-A single *indexed* row of data in a *data frame*. Contains a slice of data across columns. Has an implicit or explicit index. A sequence of values is associated with a row.
+A single row of data in a *data-frame*. Contains a slice of data across columns. Has an implicit or explicit index. A row is most commonly represented as a JavaScript object (with column names as fields). A row can also be represented as an array of values.
+
+## Series
+
+A sequence of indexed values. These are often, but not always, time-series, where the values are indexed by date/time.
+
+All values in a series are generally expected to have the same type, although this is not a requirement of *data-forge-js*.
 
 ## Column
 
-A single *named* column of data in a *data frame*. Contains a slice of data across rows. A sequence of values is associated with a column. All values in a column are generally expected to have the same type, although this is not a requirement of *data-forge-js*.  
+A single *named* series of data in a data-frame. Each column is simply a series with a name, the values of the series are the values of the column. A column is a slice of data through all rows. 
 
 ## Index 
 
-Used to index a data frame for operations such as *merge*. If not specified an integer index (starting at 0) is generated based on row position. An index can be explicitly set by promoting a column to an index.
+A sequence of values that is used to index a data-frame or series. When the data is a *time-series* the index is expected to contain *Date* values.
+ 
+Used for operations that search and merge data-farmes and series. 
+
+If not specified an integer index (starting at 0) is generated based on row position. An index can be explicitly by specifying a column by name.
+
+## Lazy Evaluation
+
+Data-frames, series and index are only fully evaluated when necessary. Operations are queued up and only fully evaluated as needed and when required, for example when serializing to csv or json (`toCSV` or `toJSON`) or when baking to values (`toValues` or `toObjects`). 
+
+A data-frame, series or index can be forcibly evaluated by calling the `bake` function. 
+
+## Iterator
+
+Iterates the rows of a data-frame, series or index. Iterators allow lazy evaluation (row by row evaluation) of data frames, series and index. This is the same concept as an [iterator in JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_Generators) or an [enumerator in C#](https://msdn.microsoft.com/en-us/library/system.collections.ienumerator(v=vs.110).aspx).
 
 # Basic Usage 
 
-## Creating a Data Frame
+## Getting data in
 
-A data frame can be simply created from values in memory. The following example creates a data frame with 3 rows:
+The DataFrame constructor is passed a *config* object that specifies the initial contents of the data frame. 
 
-	var columnNames = ["Col1", "Col2", "Col3"];
-	var values = [
-		[1, 'hello', new Date(...)],
-		[5, 'computer', new Date(...)],
-		[10, 'good day', new Date(...)]
-	]; 
-	var df = new dataForge.DataFrame(columnNames, values);
+Create a data frame from column names and rows:
 
-That example generates an index with the values *0, 1, 2*.
+	var dataFrame = new dataForge.DataFrame({
+			columnNames: ["Col1", "Col2", "Col3"],
+			rows: [
+				[1, 'hello', new Date(...)],
+				[5, 'computer', new Date(...)],
+				[10, 'good day', new Date(...)]
+			]
+		});
 
-An index can be explicitly be provided as a constructor parameter:
+A data frame can also be created from an array of JavaScript objects:
 
-	var index = new dataForge.Index([5, 10, 100]); 
-	var df = new dataForge.DataFrame(columnNames, values, index);
+	var dataFrame = new dataForge.DataFrame({
+			rows: [
+				{
+					Col1: 1,
+					Col2: 'hello',
+					Col3: new Date(....)
+				},
+				{
+					Col1: 5,
+					Col2: 'computer',
+					Col3: new Date(....)
+				},
+				{
+					Col1: 10,
+					Col2: 'good day',
+					Col3: new Date(....)
+				}
+			]
+		});
+
+
+## Getting data out
+
+To get back the names of columns:
+
+	var columnNames = dataFrame.getColumnNames();
+
+To get back an array of rows:
+
+	var rows = dataFrame.toValues();
+
+To get back an array of objects (with column names as field names):
+
+	var objects = dataFrame.toObjects();
+
+## Setting an index
+
+In the previous examples of creating a data-frame, an index was generated with values starting at zero.
+
+An index can also be set explicitly when creating a data frame:
+
+	var dataFrame = new dataForge.DataFrame({
+			columnNames: <column-names>,
+			rows: <rows>,
+			index: new dataForge.Index([5, 10, 100])
+		});
 
 Or an existing column can be promoted to an index:
  
-	var df = new dataForge.DataFrame(columnNames, values).setIndex("Col3");
+	var dataFrame = new dataForge.DataFrame(someConfig).setIndex("Col3");
 
-Be aware that promoting a column to an index in *data-forge* doesn't remove the column (as it does in *Pandas*). You can easily achieve this by calling *dropColumn*:
+Be aware that promoting a column to an index in Data-Forge doesn't remove the column (as it does in Pandas). You can easily achieve this by calling `dropSeries`:
 
-	var df = new dataForge.DataFrame(columnNames, values).setIndex("Col3").dropColumn("Col3");
+	var dataFrame = new dataForge.DataFrame(someConfig).setIndex("Col3").dropSeries("Col3");
 
-## Immutability and Chained Functions
+An index is required for certain operations like `merge`.
 
-You may have noticed in the previous examples that multiple functions have been chained.
+# Working with data
 
-*data-forge* supports only [immutable](https://en.wikipedia.org/wiki/Immutable_object) operations. Each operation returns a new immutable data frame. No *in place* operations are supported (one of the things I found confusing about *Pandas*). 
+Data-Forge has built-in support for serializing and deserializing common data formats.
+
+## CSV 
+
+	var dataFrame = dataForge.fromCSV("<csv-string-data>");
+
+	var csvTextData = dataFrame.toCSV();
+
+## JSON
+
+	var dataFrame = dataForge.fromJSON("<json-string-data>");
+
+	var jsonTextData = dataFrame.toJSON();
+
+## XML
+
+	var dataFrame = dataForge.fromXML("<xml-string-data>");
+
+	var xmlTextData = dataFrame.toXML();
+
+## YAML
+
+	var dataFrame = dataForge.fromYAML("<yaml-string-data>");
+
+	var yamlTextData = dataFrame.toYAML();
+
+## Reading and writing files in Node.js
+
+The *from* / *to* functions can be used in combination with Node.js `fs` functions for reading and writing files, eg:
+
+	var fs = require('fs');
+
+	var inputCsvData = fs.readFileSync('some-csv-file.csv', 'utf8');
+	var dataFrame = dataForge.fromCSV(inputCsvData );
+
+	var outputCsvData = dataFrame.toCSV();
+	fs.writeFileSync('some-other-csv-file.csv', outputCsvData);
+
+See the [examples section](#examples) for more examples of loading various data sources and formats.
+
+## Extracting rows from a data-frame
+
+Rows can be extracted from a data-frame in several ways.
+
+Note: the follow functions cause lazy evaluation to complete (like the *toArray* function in LINQ). This can be performance intensive.
+
+To extract rows as arrays of data (ordered by column): 
+
+
+	var arrayOfArrays = dataFrame.toValues();
+
+To extract rows as objects (with column names as fields):
+
+	var arrayOfObjects = dataFrame.toObjects();
+
+To extracts index + row pairs:
+
+	var arrayOfPairs = dataFrame.toPairs();
+
+A new data-frame can also be created from a *slice* of rows:
+
+	var startIndex = ... // Starting row index to include in subset. 
+	var endIndex = ... // Ending row index to include in subset.
+	var rowSubset = dataFrame.slice(startIndex, endIndex);
+
+Invoke a callback for each row in a data-frame using `forEach`:
+
+	dataFrame.forEach(function (row, index) {
+		// Callback function invoked for each row.
+	}); 
+
+## Extracting columns and series from a data-frame
+
+Get the names of the columns:
+
+	var arrayOfColumnNames = dataFrame.getColumnNames();
+
+Get an array of all columns:
+
+	var arrayOfColumns = dataFrame.getColumns();
+
+	for (var column in columns) {
+		var name = column.name;
+		var series = column.series;
+		// ... so something with the column ...
+	}
+
+Get the series for a column by name:
+
+	var series = dataFrame.getSeries('some-series'); 
+
+Get the series for a column by index:
+
+	var series = dataFrame.getSeries(5); 
+
+Create a new data-frame from a subset of columns:
+
+	var columnSubset = df.subset(["Some-Column", "Some-Other-Column"]);
+
+## Extract values from a series
+
+Note: the follow functions cause lazy evaluation to complete (like the *toArray* function in LINQ). This can be performance intensive.
+
+Extract the values from the series as an array:   
+
+	var arrayOfValues = someSeries.toValues();
+
+Extract index + value pairs from the series as an array:
+
+	var arrayOfPairs = someSeries.toPairs();
+
+Invoke a callback for each value in the series using `forEach`:
+
+	someSeries.forEach(function (value, index) {
+		// Callback function invoked for each value.
+	}); 
+
+## Extract values from an index
+
+Retreive the index from a data-frame:
+
+	var index = dataFrame.getIndex();
+
+Retreive the index from a series:
+
+	var index = someSeries.getIndex();
+
+Retrieve values from the index as an array:
+
+	var arrayOfValues = index.toValues();
+
+## Adding a column
+
+New columns can be added to a data-frame. This doesn't change the original data-frame, it generates a new data-frame that contains the additional column.
+
+	var newDf = df.setSeries("Some-New-Column", someNewSeries); 
+
+## Replacing a column
+
+`setSeries` can also replace an existing column:
+
+	var newDf = df.setSeries("Some-Existing-Column", someNewSeries);
+
+Again note that it is only the new data frame that includes the modified column.
+
+## Generating a column
+
+`setSeries` can be passed a function that is used to generate a new column from the existing contents of the date-frame:
+
+	var newDf = df.setSeries("Generated-Column", function (row) {
+			var someValue = ... 
+			// ... generate values for the new column from the contents of the data-frame ...
+			return someValue;
+		});
+
+## Removing a column
+
+One or more columns can easily be removed:
+
+	var newDf = df.dropSeries(['col1', 'col2']);
+
+Also works for single columns:
+
+	var newDf = df.dropSeries('Column-to-be-dropped');
+
+# Immutability and Chained Functions
+
+You may have noticed in previous examples that multiple functions have been chained.
+
+Data-Forge supports only [immutable](https://en.wikipedia.org/wiki/Immutable_object) operations. Each operation returns a new immutable data frame or column. No *in place* operations are supported (one of the things I found confusing about *Pandas*). 
 
 This is why, in the following example, the final data frame is captured after all operations are applied:
 
-	var df = new dataForge.DataFrame(columnNames, values).setIndex("Col3").dropColumn("Col3");
+	var df = new dataForge.DataFrame(config).setIndex("Col3").dropSeries("Col3");
 
 Consider an alternate structure:
 
-	var df1 = new dataForge.DataFrame(columnNames, values);
+	var df1 = new dataForge.DataFrame(config);
 	var df2 = df1.setIndex("Col3");
-	var df3 = df2.dropColumn("Col3");
+	var df3 = df2.dropSeries("Col3");
 
-Here *df1*, *df2* and *df3* are separate data frames with the results of the previous operations applied. These data frames are all immutable and cannot be changed. Any function that transforms a data frame returns a new and independent data frame. This is great, but may require some getting used to!
+Here *df1*, *df2* and *df3* are separate data-frames with the results of the previous operations applied. These data-frames are all immutable and cannot be changed. Any function that transforms a data-frame returns a new and independent data frame. If you are not used to this sort of thing, it may require some getting used to!
+
+# Lazy Evaluation
+
+Lazy evaluation in Data-Forge is implemented through *iterators*. 
+
+An iterator is retrieved from a data-frame, series or index by calling `getIterator`. A new and distinct iterator is created each time `getIterator` is called.
+
+For example:
+
+	var iterator = dataFrame.getIterator();
+
+Or
+
+	var iterator = series.getIterator();
+
+Or 
+
+	var iterator = index.getIterator();
+
+An iterator can be used to traverse a sequence and extract each index + value pair in turn.
+
+	var iterator = something.getIterator();
+	while (iterator.moveNext()) {
+		var pair = iterator.getCurrent();
+		var index  
+		// do something with the row/value.
+	}
+
+A data-frame can be created from an function that returns an iterator. This is the primary mechanism that supports creation of a pipeline of lazy DataFrames. 
+
+	var df = new dataForge.DataFrame({ 
+		iterable: function () {
+			return ... some iterator ...
+		},
+	});
+
+A series can also be created from a function that returns an iterator:
+
+	var series = new dataForge.Series({ 
+		iterable: function () {
+			return ... some iterator ...
+		},
+	});
   
-# Working with data 
-
-## Loading data
-
-The `from` function acquires data from a particular data source (eg file, HTTP, database).
-
-The `as` function [deserializes](https://en.wikipedia.org/wiki/Serialization) acquired data in a particular data format (eg csv or json).
-
-Data is loaded, saved and formatted by plugins. For this next example let's assume we have a data source plugin called `myDataSource` and a data format plugin called `myDataFormat`.
-
-Asynchronous loading is supported via [promises](https://en.wikipedia.org/wiki/Futures_and_promises). 
-
-Loading from an asynchronous data source looks like this: 
-
-	dataForge.from(myDataSource(sourceOptions))			// <-- Specify where the data is loaded from.
-		.as(myDataFormat(formatOptions))				// <-- Deserialize a particular format to a data-frame.
-		.then(function (dataFrame)) {
-			// ... do something with the data frame ...	// <-- Loaded data frame is delivered by a promise.
-		})
-		.catch(function (err) {							
-			// ... an error occurred ...				// <-- Async error handling.
-		});
-
-
-With certain plugins, we can also use the simpler API for synchronous loading:
-
-	var dataFrame = dataForge.fromSync(myDataSource(sourceOptions))		// <-- Synchronous load.
-		.as(myDataFormat(formatOptions));								// <-- Specify data format.
-
-
-Warning: Asynchronous loading is not supported by all plugins and, if not possible, will cause an exception to be thrown.
-
-## Saving data
-
-The `as` function [serializes](https://en.wikipedia.org/wiki/Serialization) a data-frame to a particular format.
-
-The `to` function saves the serialized data to a particular data source.
-
-Saving data asynchronously:
-
-	dataForge.as(myDataFormat(formatOptions))		// <-- Serialize data-frame to a particular format.
-		.to(myDataSource(sourceOptions))			// <-- Specifies where the data is saved to.
-		.then(function () {							
-			... data has been saved ....			// <-- Promise is resolved on successful save.
-		}) 
-		.catch(function (err) {							
-			// ... an error occurred ...			// <-- Async error handling.
-		});
-
-With certain plugins there is a simpler API for synchronous loading:
-
-	dataForge.as(myDataFormat(formatOptions))		// <-- Serialize data.
-		.toSync(myDataSource(sourceOptions));		// <-- Synchronously save the data.
-
-	// Data has been synchronously saved. 
-
-## Data Sources and Formats
-
-*data-forge* supports a number of data sources and formats out of the box. Creating custom plugins is very easy.
-
-Please see subsequent sections in the README for examples of the most common plugins.  
-
-### NodeJS data sources
-
-The NodeJS package includes several data sources.
-
-- File: For loading/saving to files.
-- MongoDB: For loading/saving to MonogDB collections.
-
-There are more to come, including:
-
-- SQL
-- HTTP (rest APIs)
-
-### Browser data sources
-
-- HTTP: For HTTP GET/POST to a REST API.
-
-### Data formats
-
-- CSV: For serializing/deserializing CSV files. 
-- Json: For serializing/deserializing JSON files. 
-
-There are more to come, including:
-
-- XML
-- BSON
-- YAML
-
-### Custom data source
-
-Skip this section if you aren't yet interested in creating plugins.
-
-Creating a custom data source is simple. You must implement a JavaScript object with functions `read` and `write`. Both functions are expected to execute asynchronously and return a [promise](https://en.wikipedia.org/wiki/Futures_and_promises) ([Q](https://www.npmjs.com/package/q) is used internally, other promise libraries should also work).
-
-If your plugin can be executed synchronously you also provide `readSync` and `writeSync` functions. If your plugin can't be executed synchronously, then don't provide these functions. *data-forge* will take care of throwing an exception with a reasonable error message if users tries to synchronously use a plugin that it is not intended to be used that way.
-
-Here is the *simplest* stub for a data source plugin (designed to be used with NodeJS):
-
-	'use strict';
-
-	module.exports = function (dataSourceOptions) {
-		
-		return {
-		
-			//
-			// Asynchronous read from data source. 
-			//	
-			read: function () {
-
-				// ... invoke async operation, return promise ...
-				
-			},
-			
-			//
-			// Asynchronous write to data source.
-			//
-			write: function (data) {
-	
-				// ... invoke async operation, write 'data' to data source, return promise ...
-			},
-
-			//
-			// Synchronous read from data source. 
-			//	
-			readSync: function () {
-
-				// ... perform synchronous operation, return loaded data ...
-				
-			},
-			
-			//
-			// Synchronous write to data source.
-			//
-			writeSync: function (data) {
-	
-				// ... perform synchronous operation, write 'data' to data source, then return ...
-			},
-		};
-	};
-	
-### Custom data format
-
-Skip this section if you aren't yet interested in creating plugins.
-
-Creating a data format plugin is even simpler than making a data source plugin (ignoring the peculiarities of serializing specific data formats).
-
-You must implement a JavaScript object with `from` and `to` functions. `from` deserializes a data frame from raw data. `to` serializes a data frame to raw data. The format of the raw data depends on the data sources that the data format is intended to be used with.
-
-Following is the *simplest* stub data format plugin (implemented as NodeJS module):
-
-	'use strict';
-
-	module.exports = function (dataFormatOptions) {
-
-		return {
-	
-			//
-			// Deserialize from raw data.
-			//
-			from: function (data) {
-			
-				// ... create a data frame and populate it with the data, return the data frame ...
-			},
-			
-			//
-			// Serialize a data frame to raw data.
-			//
-			to: function (dataFrame) {
-				
-				// ... generate raw data from the contents of the data rame, return the raw data ...
-			},	
-		};
-	};
-
 # Data exploration and visualization
 
-In order to understand the data we are working 
+In order to understand the data we are working with we must explore it, understand the data types involved and the composition of the values.
 
 ## Console output
 
-The data frame, index and column classes all provide a `toString` function that can be used to visualize data on the console.
+Data-frame, index and series all provide a `toString` function that can be used to dump data to the console in a readable format.
 
-You can also query for data frame values, column names and column values (described further below) so you can dump whatever you want to the console.
+Use the LINQ functions `skip` and `take` to preview a subset of the data (more on LINQ functions soon):
 
-If you want to preview a subset of the data you can use the LINQ functions `skip` and `take` (more on LINQ functions soon):
+	// Skip 10 rows, then dump 20 rows.
+	console.log(df.skip(10).take(20).toString()); 
 
-	console.log(df.skip(10).take(20).toString()); // <-- Skip 10 rows, then dump 20 rows.
+Or more conveniently: 
 
-There is also a convenient function for getting a subset of rows:
+	// Get a range of rows starting at row index 10 and ending at (but not including) row index 20.
+	console.log(df.slice(10, 20).toString()); 
 
-	console.log(df.getRowsSubset(10, 20).toString()); // <-- Get a range of 20 rows starting at index 10.
+As you explore a data set you may want to understand what data types you are working with. You can use the `detectTypes` function to produce a new data frame with information on the data types in the data frame you are exploring:
 
-As you explore a data set you may want to understand what data types you are working with. You can use the `getTypes` function to produce a new data frame with information on the data types in the data frame you are exploring:
-
-	var typesDf = df.getTypes(); // <-- Create a data frame with the types from the source data frame.
+	// Create a data frame with details of the types from the source data frame.
+	var typesDf = df.detectTypes(); 
 	console.log(typesDf.toString());
 
+For example, here is the output with data from Yahoo:
+
+	__index__  		  Type    Frequency  Column
+	----------------  ------  ---------  ---------
+	0                 date    100        Date
+	1                 number  100        Open
+	2                 number  100        High
+	3                 number  100        Low
+	4                 number  100        Close
+	5                 number  100        Volume
+	6                 number  100        Adj Close
+
+You also probably want to understand the composition of values in the data frame. This can be done using `detectValues` that examines the values and reports on their frequency: 
+
+	// Create a data frame with the information on the frequency of values from the source data frame.
+	var valuesDf = df.detectValues(); 
+	console.log(valuesDf.toString());
 
 ## Visual output
 
-More on this soon. If you need to get started now the [Github repo](https://github.com/Real-Serious-Games/data-forge-js) has [examples](https://github.com/Real-Serious-Games/data-forge-js/tree/master/examples) showing how to use *data-forge* with [Flot](http://www.flotcharts.org/).
+The [Github repo](https://github.com/data-forge/data-forge-js) has [examples](https://github.com/data-forge/data-forge-js/tree/master/examples) showing how to use *data-forge* with [Flot](http://www.flotcharts.org/).
 
-# Accessing the data 
-
-## Accessing all values
-
-`getValues` pulls all values (across all columns and rows) for a data frame.
-
-It returns an array of arrays. Each nested array represents a row.
-
-	console.log(df.getValues());
-
-## Column access
-
-There are several ways to access columns.
-
-An entire column can be extracted using `getColumn`. The column is specified by name:
-
-	var column = df.getColumn("Some-Column");
-	console.log(column.toString());
-
-Or by (zero-based) index: 
-
-	var column = df.getColumn(2); // <-- Get column at array-index 2. 
-	console.log(column.toString());
-
-Get the names of all columns via `getColumnNames`:
-
-	console.log(df.getColumnNames());
-
-Get all column objects via `getColumn`:
-
-	var columns = df.getColumns();
-	columns.forEach(function (column) {
-		console.log(column.toString());
-	});
-
-Create a new data frame from a sub-set of columns:
-
-	var subset = df.getColumnsSubset(["Some-Column", "Some-Other-Column"]);
-
-## Accessing column values
-
-Call `getValues` on a column to pull an array of all values in that column.
-
-	var columnValues = df.getColumn("Some-Column").getValues();
+There is a [Code Project article](http://www.codeproject.com/Articles/1069489/Highstock-plus-Data-Forge-plus-Yahoo) on using Highstock with Data-Forge to chart Yahoo financial data.
 
 # Data transformation
 
 ## Data frame transformation
 
-An entire data frame can be transformed using the [LINQ](https://en.wikipedia.org/wiki/Language_Integrated_Query)-style [`select`](http://www.dotnetperls.com/select) function:
+An data-frame can be transformed using the [LINQ](https://en.wikipedia.org/wiki/Language_Integrated_Query)-style [`select`](http://www.dotnetperls.com/select) function:
 
-	var transformedDataFrame = df
+	var transformedDataFrame = sourceDataFrame
 		.select(function (row) {
 			return {
 				NewColumn: row.OldColumn * 2,	// <-- Transform existing column to create a new column.
@@ -469,33 +603,47 @@ An entire data frame can be transformed using the [LINQ](https://en.wikipedia.or
 			};
 		});
 
-The assigned index is maintained for the transformed data frame.
+This produces an entirely new data-frame. However the new data-frame has the same index as the source data-frame, so both can be merged back together, if required: 
+
+	var mergedDataFrame = dataForge.merge(sourceDataFrame, transformedDataFrame);
 
 The more advanced [`selectMany`](http://www.dotnetperls.com/selectmany) function is also available.
 
-Note: Data frames are immutable, the original column is unmodified.
+Note: Data-frames are immutable, the source data-frame remains unmodified.
 
-## Column transformation
+## Series transformation
 
-Columns can also be transformed using `select`:
+Series can be transformed using `select`:
 
-	var oldColumn = df.getColumn("Some-Column");
-	var newColumn = oldColumn
+	var oldSeries = df.getSeries("Some-Column");
+	var newSeries = oldSeries
 		.select(function (value) {
-			return transform(value); 	// <-- Apply a transformation to each value in the column.
-		});
+			// Apply a transformation to each value in the column.
+			return transform(value); 	
+		});	
+	// Plug the modified series back into the data-frame.
+	var newDf = df.setSeries("Some-Column", newSeries);
 
-The column index is maintained for the transformed column.
+The source index is preserved to the transformed series.
 
-Note: Columns are immutable, the original column is unmodified.
+Note: Series are immutable, the original series is unmodified.
 
-## Data frame and column filtering
+Data-Frame offers a convenience function `transformSeries` for when you want to extract, transform and plug back in one or more series at once. For example to simplify the previous code example:
 
-Data frames and columns can be filtered using the [LINQ](https://en.wikipedia.org/wiki/Language_Integrated_Query)-style [`where`](http://www.dotnetperls.com/where) function:
+	var newDf = df.transformSeries({
+		Some-Column: function (value) {
+			// Apply a transformation to each value in the column.
+			return transform(value); 	
+		},
+	);
+
+## Data-frame and series filtering
+
+Data-frames and series can be filtered using the [LINQ](https://en.wikipedia.org/wiki/Language_Integrated_Query)-style [`where`](http://www.dotnetperls.com/where) function:
 
 	var newDf = df
 		.where(function (row) {
-			// .. return true to include the row in the new data frame, return false to exclude it ...
+			// ... return true to include the row in the new data frame, return false to exclude it ...
 		});
 
 ## LINQ functions
@@ -504,175 +652,333 @@ Most of the other [LINQ functions](https://code.msdn.microsoft.com/101-LINQ-Samp
 
 More documentation will be here soon on supported LINQ functions.
 
-## Adding a column
+## Summarization and Aggregation
 
-New columns can be added to a data frame. Again note that this doesn't change the original data frame, but generates a new data frame that contains the additional column.
+## Group
 
-	var newDf = df.setColumn("Some-New-Column", newColumnObject); 
+Data in one data-frame can be grouped into multiple data-frames on values selected from the data-frame.
 
-## Replacing a column
+For example, grouping raw sales data by client:
 
-We can replace an existing column using the same function:
+	var salesByClient = salesData.groupBy(function (row, index) {
+			return row.ClientName;
+		});
 
-	var newDf = df.setColumn("Some-Existing-Column", newColumnObject);
+This returns an array of objects with the following format:
 
-Again note that it is only the new data frame that includes the modified column.
+	[
+		{
+			key:	<group-by-value>, 
+			data:	<data-frame-containing-grouped-data>,
+		},
+	
+		...
+	]
 
-## Removing a column
+todo: have a proper example here with data.
 
-A column can easily be removed:
+## Aggregate
 
-	var newDf = df.dropColumn('Column-to-be-dropped');
+todo
 
-## Data frame aggregation
+### Merge
 
-Under construction this is a work in progress.
+todo
 
-## Data frame window
+## Group, Aggregate and Combine
 
-Under construction this is a work in progress.
+	// Group by client.
+	var groups = salesData.groupBy(function (row) { 
+			return row.ClientName;
+		});
 
-# Examples
+	// Aggregate each group.
+	var aggregated = Enumerable.from(groups) 	// Use regular linq. 
+		.select(function (group) {
+				return group.data.aggregate({
+					ClientName: group.key,
+					Amount: dataForge.sum, 		// Sum sales per client.
+				});
+		})
+		.toArray();
+
+	// Combine the data back together.
+	var combined = dataForge.concat(aggregated);
+	console.log(combined.toString());
+
+### Window 
+
+The `window` function allows you to produce a new series for a data-frame or series by considering only a window of rows at a time. The *window* passes over the data-frame or series *batch-by-batch*, taking the first N rows for the first window, then the second N rows for the next window and so on.
+
+	var windowSize = 5; // Looking at 5 rows at a times.
+	var newSeries = sourceSeriesOrDataFrame.window(windowSize,
+			function (window, windowIndex) {
+				var index = ... compute index for row ...
+				var value = ... compute value for row ...
+				return [index, value]; // Generate a row in the new series.			
+			}
+		);
+
+Each invocation of the selector function is passed a data-frame or series that represents the window of time requested. The return value of the selector produces a row in the new series: an array is returned that contains a pair of values. The pair specifies the index and value for the row.
+	   
+The window function can be used for summarization and aggregation of data.
+
+As an example consider computing the weekly totals for daily sales data:
+
+	var salesData = ... series containing amount sold on each day ...
+
+	var weeklySales = salesData.window(7, 
+			function (window, windowIndex) {
+				return [
+					window.getIndex().last(), // Week ending.
+					window.sum(),			  // Total the amount sold during the week.
+				]; 
+			},
+		);
+
+## Rolling window
+
+Like the window function, `rollingWindow` considers a window of rows at a time. This function however *rolls* across the data-frame or series *row-by-row* rather than batch-by-batch. The selector function produces a new series with summarized or aggregated data. 
+
+The `percentChange` function that is included is probably the simplest example use of `rollingWindow`. It computes a new series with the percentage increase of each value in the source series.
+
+The implementation of `percentChange` looks a bit like this:
+    
+	var windowSize = 2;
+	var pctChangeSeries = sourceSeries.rollingWindow(windowSize, 
+			function (window, windowIndex) {
+				var values = window.toValues();
+				var amountChange = values[1] - values[0]; // Compute amount of change.
+				var pctChange = amountChange / values[0]; // Compute % change.
+				return [window.getIndex().last(), pctChange]; // Return new index and value.
+			}
+		);
+   
+`percentChange` is simple because it only considers a window size of 2.
+
+Now consider an example that requires a variable window size. Here is some code that computes a *simple moving average* (derived from *[data-forge-indicators](https://github.com/data-forge/data-forge-indicators)*):
+
+	var Enumerable = require('linq');
+
+	var smaPeriod = ... variable window size ...
+ 	var smSeries = sourceSeries.rollingWindow(smaPeriod, 
+			function (window, windowIndex) {
+	    		return [
+					window.getIndex().last(),
+					window.sum() / period,
+	    	}
+		);	
+
+# Node.js examples
 
 ## Working with CSV files
 
-To work with CSV files on disk you need the *file* and *csv* plugins that are included with *data-forge*.
-
+	var fs = require('fs');
 	var dataForge = require('data-forge');
-	var file = require('data-forge/source/file');
-	var csv = require('data-forge/format/csv');
 
-	var csvInputFilePath = "input-csv-file.csv";
-	var csvOutputFilePath = "output-csv-file.csv";
+	var inputFilePath = "input-file.csv";
+	var outputFilePath = "output-file.csv";
 
-	dataForge.from(file(csvInputFilePath)) 			// <-- Load from input file.
-		.as(csv())									// <-- Deserialize the file from CSV.
-		.then(function (dataFrame) {
-			// ... transform the data frame ...		// <-- Transform the data.
+	var inputDataFrame = dataForge.fromCSV(fs.readFileSync(inputFilePath, 'utf8'));
 
-			return dataFrame.as(csv())				// <-- Serialize the file to CSV.
-				.to(file(csvOutputFilePath));		// <-- Save to output file.
-		})
-		.then(function () {
-			console.log('Success!');				// <-- Output file successfully saved.
-		});	
-		.catch(function (err) {
-			console.error(err && err.stack || err); // <-- Handle errors.
-		});
+	var outputDataFrame = inputDataFrame.select(... some transformation ...);
+
+	fs.writeFileSync(outputFilePath, outputDataFrame.toCSV()); 
 
 ## Working with JSON files
 
-To work with JSON files on disk you need the *file* and *json* plugins that are included with *data forge*.
+	var fs = require('fs');
+	var dataForge = require('data-forge');
+
+	var inputFilePath = "input-file.json";
+	var outputFilePath = "output-file.json";
+
+	var inputDataFrame = dataForge.fromJSON(fs.readFileSync(inputFilePath, 'utf8'));
+
+	var outputDataFrame = inputDataFrame.select(... some transformation ...);
+
+	fs.writeFileSync(outputFilePath, outputDataFrame.toJSON()); 
+
+## Working a massive CSV file
+
+When working with large text files use *FileReader* and *FileWriter*. *FileReader* is an iterator, it allows the specified file to be loaded piecemeal, in chunks, as required. *FileWriter* allows iterative output. These work in combination with lazy evaluation so to incrementally read, process and write massive files that are too large or too slow to work with in memory in their entirety.  
 
 	var dataForge = require('data-forge');
-	var file = require('data-forge/source/file');
-	var json = require('data-forge/format/json');
+	var FileReader = require('data-forge/file-reader');
+	var FileWriter = require('data-forge/file-writer');
 
-	var jsonInputFilePath = "input-json-file.json";
-	var jsonOutputFilePath = "output-json-file.json";
+	var inputFilePath = "input-file.csv";
+	var outputFilePath = "output-file.csv";
 
-	dataForge.from(file(jsonInputFilePath)) 		// <-- Load from input file.
-		.as(json())									// <-- Deserialize the file from JSON.
-		.then(function (dataFrame) {
-			// ... transform the data frame ...		// <-- Transform the data.
+	// Read the file as it is processed.	
+	var inputDataFrame = dataForge.from(new FileReader(inputFilePath));
 
-			return dataFrame.as(json())				// <-- Serialize the file to JSON.
-				.to(file(jsonOutputFilePath));		// <-- Save to output file.
+	var outputDataFrame = inputDataFrame.select(... some transformation ...);
+
+	dataForge.to(new FileWriter(outputDataFrame)); 
+ 
+
+## Working with a MongoDB collection
+
+	var pmongo = require('promised-mongo');
+	var db = pmongo('localhost/some-database', ['someCollection', 'someOtherCollection']);
+
+	db.someCollection.find().toArray()
+		.then(function (documents) {
+			var inputDataFrame = new dataForge.DataFrame({ rows: documents });
+
+			var outputDataFrame = inputDataFrame.select(... some transformation ...);
+
+			return db.someOtherCollection.insert(outputDataFrame.toObjects());			
 		})
 		.then(function () {
-			console.log('Success!');				// <-- Output file successfully saved.
-		});	
+			console.log('Done!');
+		})
 		.catch(function (err) {
-			console.error(err && err.stack || err); // <-- Handle errors.
+			console.error(err);
 		});
 
-## Working with MongoDB
+## Working with a massive MongoDB collection
 
-When working with MongoDB we use the *mongo* plugin combine with the *json* plugin. 
+Same as previous example, except use skip and take to only process a window of the collection.
 
-	var dataForge = require('data-forge');
-	var mongo = require('data-forge/source/mongo');
-	var json = require('data-forge/format/json');
+	var pmongo = require('promised-mongo');
+	var db = pmongo('localhost/some-database', ['someCollection', 'someOtherCollection']);
 
+	db.someCollection.find()
+		.skip(300)
+		.take(100)
+		.toArray()		
+		.then(function (documents) {
+			var inputDataFrame = new dataForge.DataFrame({ rows: documents });
 
-	dataForge.from(mongo({							// <-- Load from mongodb collection.
-			host: 'some-database-host',
-			db: 'some-database',
-			collection: 'input-collection'
-		})) 		
-		.as(json())									// <-- Deserialize the file from JSON.
-		.then(function (dataFrame) {
-			// ... transform the data frame ...		// <-- Transform the data.
+			var outputDataFrame = inputDataFrame.select(... some transformation ...);
 
-			return dataFrame.as(json())				// <-- Serialize the file to JSON.
-				.to(mongo({							// <-- Save to mongodb collection.
-					host: 'some-database-host',
-					db: 'some-database',
-					collection: 'output-collection'
-				});
+			return db.someOtherCollection.insert(outputDataFrame.toObjects());			
 		})
 		.then(function () {
-			console.log('Success!');				// <-- Output collection successfully saved.
-		});	
+			console.log('Done!');
+		})
 		.catch(function (err) {
-			console.error(err && err.stack || err); // <-- Handle errors.
+			console.error(err);
 		});
 
 ## Working with HTTP
 
-When working with HTTP we can use *json*, *csv* and other text formats. This example uses *json* as it is the most common used in combination with HTTP. 
+	var request = require('request-promise');
 
-Note that HTTP is the only *data source* that works in the browser. So this example can work in both NodeJS and the browser. A NodeJS example is presented first, followed by the browser.
+	request(
+		{
+			method: 'GET',
+			uri: "http://some-host/a/rest/api',
+			json: true,
+		})
+		.then(function (data) {
+			var inputDataFrame = new DataFrame({ rows: data });
 
-### NodeJS 
- 
-	var dataForge = require('data-forge');
-	var http = require('data-forge/source/http');
-	var json = require('data-forge/format/json');
-
-	var url = "http://somewhere.com/rest/api";
-
-	dataForge.from(http(url))						// <-- HTTP GET data from REST API.
-		.as(json())									// <-- Deserialize the file from JSON.
-		.then(function (dataFrame) {
-			// ... transform the data frame ...		// <-- Transform the data.
-
-			return dataFrame.as(json())				// <-- Serialize the file to JSON.
-				.to(http(url));						// <-- HTTP POST data to REST API.
+			var outputDataFrame = inputDataFrame.select(... some transformation ...);
+			
+			return request(
+				{
+					method: 'POST',
+					uri: "http://some-host/another/rest/api',
+					body: { 
+						data: outputDataFrame.toObjects() 
+					},
+					json: true,
+				});			 
 		})
 		.then(function () {
-			console.log('Success!');				// <-- Success!
-		});	
+			console.log('Done!');
+		})
 		.catch(function (err) {
-			console.error(err && err.stack || err); // <-- Handle errors.
+			console.error(err);
 		});
 
-### Browser
+# Browser examples
+
+## Working with HTTP in the browser
+
+This example depends on the [jQuery](http://jquery.com/) [get function](https://api.jquery.com/jquery.get/). 
 
 Note the differences in the way plugins are referenced than in the NodeJS version.
 
-HTML:
+**HTML**
 
+	<script src="bower_components/jquery/dist/jquery.js"></script>
 	<script src="bower_components/data-forge/data-forge.js"></script>
 
-Javascript:
+**Javascript for JSON**
 
 	var url = "http://somewhere.com/rest/api";
+	$.get(url, 
+		function (data) {
+			var dataFrame = new dataForge.DataFrame({ rows: data });
+			// ... work with the data frame ...
+		}
+	);
 
-	dataForge.from(dataForge.http(url))				// <-- HTTP GET data from REST API.
-		.as(dataForge.json())						// <-- Deserialize the file from JSON.
-		.then(function (dataFrame) {
-			// ... transform the data frame ...		// <-- Transform the data.
+	var someDataFrame = ...
+	$.post(url, someDataFrame.toObjects(),
+		function (data) {
+			// ...
+		}
+	);
+	
+**Javascript for CSV**
 
-			return dataFrame.as(dataForge.json())	// <-- Serialize the file to JSON.
-				.to(dataForge.http(url));			// <-- HTTP POST data to REST API.
+	var url = "http://somewhere.com/rest/api";
+	$.get(url, 
+		function (data) {
+			var dataFrame = dataForge.fromCSV();
+			// ... work with the data frame ...
+		}
+	);
+
+	var someDataFrame = ...
+	$.post(url, someDataFrame.toCSV(),
+		function (data) {
+			// ...
+		}
+	);
+
+
+## Working with HTTP in AngularJS
+
+**HTML**
+
+	<script src="bower_components/angular/angular.js"></script>
+	<script src="bower_components/data-forge/data-forge.js"></script>
+
+**Javascript**
+
+	// Assume [$http](https://docs.angularjs.org/api/ng/service/$http) is injected into your controller.
+
+	var url = "http://somewhere.com/rest/api";
+	$http.get(url)
+		.then(function (data) {
+			var dataFrame = new dataForge.DataFrame(data);
+			// ... work with the data frame ...			
 		})
-		.then(function () {
-			console.log('Success!');				// <-- Success!
-		});	
 		.catch(function (err) {
-			console.error(err && err.stack || err); // <-- Handle errors.
+			// ... handle error ...
 		});
 
+	var someDataFrame = ...
+	$http.post(url, someDataFrame.toObjects())
+		.then(function () {
+			// ... handle success ...
+		})
+		.catch(function (err) {
+			// ... handle error ...
+		});
+ 
+## Visualisation with Flot
+
+todo
+
+## Visualisation with Highstock
+
+todo
 
 

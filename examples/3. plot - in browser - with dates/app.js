@@ -11,8 +11,8 @@ $(function() {
 		var flotSeries = E.from(remainingColumnNames)
 			.select(function (columnName) {
 				var seriesData = dataFrame
-					.getColumnsSubset([indexColumnName, columnName])
-					.getValues();
+					.subset([indexColumnName, columnName])
+					.toValues();
 				seriesData = E.from(seriesData)
 					.select(function (entry) {
 						return [entry[0].getTime(), entry[1]];
@@ -40,7 +40,10 @@ $(function() {
 		})
 		.toArray();
 
-	var dataFrame = new dataForge.DataFrame(["Date", "Sin", "Cos"], values);
+	var dataFrame = new dataForge.DataFrame({
+			columnNames: ["Date", "Sin", "Cos"], 
+			rows: values
+		});
 	
 	//
 	// Plot the data frame.

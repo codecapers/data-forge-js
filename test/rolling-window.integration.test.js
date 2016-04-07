@@ -7,34 +7,35 @@ describe('rolling window integration', function () {
 	var E = require('linq');
 	var expect = require('chai').expect;
 
-	it('blah', function () {
+	it('rolling window', function () {
 
-		var dataFrame = new dataForge.DataFrame(
-			[
-				"Value",
-			],
-			E.range(1, 12)
+		var dataFrame = new dataForge.DataFrame({
+			columnNames: [ "Value" ],
+			rows: E.range(1, 12)
 				.select(function (i) {
 					return [i];
 				})
 				.toArray(),
-			new dataForge.Index("__test__", E.range(10, 12).toArray())
-		);
+			index: new dataForge.Index(E.range(10, 12).toArray())
+		});
 
-		var newColumn = dataFrame
-			.getColumn('Value')
-			.rollingWindow(5, function (index, values, rowIndex) {
+		var newSeries = dataFrame.getSeries('Value')
+			.rollingWindow(5, function (window, windowIndex) {
+				//todo: var index = window.getIndex().last();
+				//todo: var value = window.last();
+				var index = window.getIndex().toValues();
+				var values = window.toValues();
 				return [index[index.length-1], values[values.length-1]];
 			});
 
-		expect(newColumn.getIndex().getValues()).to.eql([14, 15, 16, 17, 18, 19, 20, 21]);
-		expect(newColumn.getValues()).to.eql([5, 6, 7, 8, 9, 10, 11, 12]);
+		expect(newSeries.getIndex().toValues()).to.eql([14, 15, 16, 17, 18, 19, 20, 21]);
+		expect(newSeries.toValues()).to.eql([5, 6, 7, 8, 9, 10, 11, 12]);
 
-		var newDataFrame = dataFrame.setColumn('Value2', newColumn);
+		var newDataFrame = dataFrame.setSeries('Value2', newSeries);
 
-		expect(newDataFrame.getIndex().getValues()).to.eql([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+		expect(newDataFrame.getIndex().toValues()).to.eql([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
 
-		expect(newDataFrame.getValues()).to.eql([
+		expect(newDataFrame.toValues()).to.eql([
 			[1, undefined],
 			[2, undefined],
 			[3, undefined],

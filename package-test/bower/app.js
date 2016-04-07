@@ -6,14 +6,14 @@ $(function() {
 	// Helper function for plotting.
 	//
 	var plot = function (id, indexColumnName, dataFrame) {
-		var index = dataFrame.getColumn(indexColumnName).getValues();
+		var index = dataFrame.getSeries(indexColumnName).toValues();
 		var remainingColumns = dataFrame.dropColumn(indexColumnName).getColumns();
 
-		var flotSeries = E.from(remainingColumns)
+		var flotSeries = Enumerable.from(remainingColumns)
 			.select(function (column) {
-				var name = column.getName();
-				var data = E.from(index)
-					.zip(column.getValues(), function (index, value) {
+				var name = column.name;
+				var data = Enumerable.from(index)
+					.zip(column.series.toValues(), function (index, value) {
 						return [index, value];
 					})
 					.toArray();
@@ -36,7 +36,10 @@ $(function() {
 		values.push([i, Math.sin(i), Math.cos(i)]);
 	}
 
-	var dataFrame = new dataForge.DataFrame(["index", "Sin", "Cos"], values);
+	var dataFrame = new dataForge.DataFrame({
+			columnNames: ["index", "Sin", "Cos"], 
+			rows: values
+		});
 	
 	//
 	// Plot the data frame.
